@@ -23,7 +23,8 @@ public class ContextHandler {
 		return me;
 	}
 
-	public void addContextSummary(ContextSummary summary) {
+	// FIXME: synchronized all methods that access "summaries" for multithreaded simulation - may want to back out of that change
+	public synchronized void addContextSummary(ContextSummary summary) {
 		Integer id = summary.getId();
 		summaries.put(id, summary);
 	}
@@ -34,7 +35,7 @@ public class ContextHandler {
 		}
 	}
 	
-	public ContextSummary get(int id) {
+	public synchronized ContextSummary get(int id) {
 		ContextSummary summary = summaries.get(id);
 		
 		if (summary == null) {
@@ -49,7 +50,7 @@ public class ContextHandler {
 		return summary.get(key);
 	}
 
-	public Collection<BloomierContextSummary> getBloomierSummaries() {
+	public synchronized Collection<BloomierContextSummary> getBloomierSummaries() {
 		try {
 			ArrayList<BloomierContextSummary> bloomierSummaries = new ArrayList<BloomierContextSummary>(summaries.size());
 			for (ContextSummary summary: summaries.values()) {
