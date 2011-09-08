@@ -11,41 +11,39 @@ import java.net.SocketException;
 import edu.utexas.ece.mpc.context.DatagramContextShim;
 
 public class ContextShimmedDatagramSocket extends DatagramSocket {
-	
-	public ContextShimmedDatagramSocket() throws SocketException {
-		super();
-	}
 
-	protected ContextShimmedDatagramSocket(DatagramSocketImpl impl) {
-		super(impl);
-	}
+    public ContextShimmedDatagramSocket() throws SocketException {
+        super();
+    }
 
-	public ContextShimmedDatagramSocket(int port, InetAddress laddr)
-			throws SocketException {
-		super(port, laddr);
-	}
+    protected ContextShimmedDatagramSocket(DatagramSocketImpl impl) {
+        super(impl);
+    }
 
-	public ContextShimmedDatagramSocket(int port) throws SocketException {
-		super(port);
-	}
+    public ContextShimmedDatagramSocket(int port, InetAddress laddr) throws SocketException {
+        super(port, laddr);
+    }
 
-	public ContextShimmedDatagramSocket(SocketAddress bindaddr)
-			throws SocketException {
-		super(bindaddr);
-	}
-	
-	@Override
-	public void send(DatagramPacket p) throws IOException {
-		super.send(shim.getSendPacket(p));
-	}
-	
-	@Override
-	public synchronized void receive(DatagramPacket p) throws IOException {
-		DatagramPacket receivePacket = shim.getReceivePacket(p);
-		super.receive(receivePacket);
-		shim.processReceivedPacket(receivePacket, p);
-	}
+    public ContextShimmedDatagramSocket(int port) throws SocketException {
+        super(port);
+    }
 
-	private static DatagramContextShim shim = new DatagramContextShim();
-	
+    public ContextShimmedDatagramSocket(SocketAddress bindaddr) throws SocketException {
+        super(bindaddr);
+    }
+
+    @Override
+    public void send(DatagramPacket p) throws IOException {
+        super.send(shim.getSendPacket(p));
+    }
+
+    @Override
+    public synchronized void receive(DatagramPacket p) throws IOException {
+        DatagramPacket receivePacket = shim.getReceivePacket(p);
+        super.receive(receivePacket);
+        shim.processReceivedPacket(receivePacket, p);
+    }
+
+    private static DatagramContextShim shim = new DatagramContextShim();
+
 }
