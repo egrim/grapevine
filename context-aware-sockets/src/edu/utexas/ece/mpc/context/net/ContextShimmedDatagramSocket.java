@@ -1,4 +1,4 @@
-package edu.utexas.ece.mpc.context;
+package edu.utexas.ece.mpc.context.net;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -7,7 +7,8 @@ import java.net.DatagramSocketImpl;
 import java.net.InetAddress;
 import java.net.SocketAddress;
 import java.net.SocketException;
-import java.util.Arrays;
+
+import edu.utexas.ece.mpc.context.DatagramContextShim;
 
 public class ContextShimmedDatagramSocket extends DatagramSocket {
 	
@@ -35,17 +36,16 @@ public class ContextShimmedDatagramSocket extends DatagramSocket {
 	
 	@Override
 	public void send(DatagramPacket p) throws IOException {
-		byte[] shimmedBytes = contextShim.injectContextBytes(p.getData());
-		p.setData(shimmedBytes);
-		super.send(p);
+		super.send(shim.getSendPacket(p));
 	}
 	
 	@Override
 	public synchronized void receive(DatagramPacket p) throws IOException {
-		super.receive(p);
-		byte[] originalBytes = contextShim.extractContextBytes(Arrays.copyOf(p.getData(), p.getLength())); // TODO: is this additional copy worth it? (simplicity of not sending length to extraction method)
-		p.setData(originalBytes);
+		DatagramPacket receivePacket = shim.getReceivePacket(p);
+		super.receive(receivePacket);
+		shim.processReceivedPacket(receivePacket, p);
 	}
 
-	private static ContextShim contextShim = new ContextShim();
+	private static DatagramContextShim shim = new DatagramContextShim();
+	
 }

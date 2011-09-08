@@ -3,12 +3,11 @@ package edu.utexas.ece.mpc.context;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 
-import com.esotericsoftware.kryo.CustomSerialization;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.ObjectBuffer;
 import com.esotericsoftware.kryo.serialize.CollectionSerializer;
 
-public class ContextShim implements CustomSerialization {
+public class ContextShim {
 
 	public ContextShim() {
 		kryo = new Kryo();
@@ -24,40 +23,18 @@ public class ContextShim implements CustomSerialization {
 		contextHandler = ContextHandler.getInstance();
 	}
 	
-	public byte[] injectContextBytes(byte[] data) {
-		ArrayList<ContextSummary> summaries = new ArrayList<ContextSummary>(contextHandler.getBloomierSummaries()); // create new list so that serialized type matches what is expected
-		byte[] shimBytes = kryoSerializer.writeObjectData(summaries);
-		
-		byte[] newData = new byte[shimBytes.length + data.length];
-		System.arraycopy(shimBytes, 0, newData, 0, shimBytes.length);
-		System.arraycopy(data, 0, newData, shimBytes.length, data.length);
-		
-		return newData;
-	}
-
-	public byte[] extractContextBytes(byte[] data) {
-		// TODO: handle errors (currently makes assumptions about data)
-		ByteBuffer buffer = ByteBuffer.wrap(data);
-		@SuppressWarnings("unchecked")
-		ArrayList<ContextSummary> summaries = (ArrayList<ContextSummary>) kryo.readObjectData(buffer, ArrayList.class);
-		contextHandler.addContextSummaries(summaries);
-		byte[] newData = new byte[buffer.remaining()];
-		buffer.get(newData);
-		return newData;
+	public byte[] getContextBytes() {
+		ArrayList<BloomierContextSummary> summaries = contextHandler.getSummariesToSend();
+		return kryoSerializer.writeObjectData(summaries);
 	}
 	
+	public void processContextBytes(ByteBuffer buffer) {
+		@SuppressWarnings("unchecked")
+		ArrayList<BloomierContextSummary> summaries = (ArrayList<BloomierContextSummary>) kryo.readObjectData(buffer, ArrayList.class);
+		contextHandler.addOrUpdateReceivedSummaries(summaries);
+	}
+
 	private ContextHandler contextHandler;
 	private Kryo kryo;
 	private ObjectBuffer kryoSerializer;
-	@Override
-	public void readObjectData(Kryo arg0, ByteBuffer arg1) {
-		// TODO Auto-generated method stub
-		
-	}
-
-	@Override
-	public void writeObjectData(Kryo arg0, ByteBuffer arg1) {
-		// TODO Auto-generated method stub
-		
-	}
 }

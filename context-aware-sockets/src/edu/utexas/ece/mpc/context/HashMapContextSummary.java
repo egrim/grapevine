@@ -5,6 +5,7 @@ import java.net.SocketException;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.UUID;
+import java.util.concurrent.TimeoutException;
 
 @SuppressWarnings("serial")
 public class HashMapContextSummary extends HashMap<String, Integer> implements ContextSummary {
@@ -42,22 +43,29 @@ public class HashMapContextSummary extends HashMap<String, Integer> implements C
 			throw new RuntimeException("Could not find an interface with a MAC address");
 		}
 		
-		create(id);
+		this.id = id;
 	}
 	public HashMapContextSummary(int id) {
-		create(id);
+		this.id = id;
 	}
 	
 	@Override
 	public Integer get(String key) {
 		return super.get(key);
 	}
+	
+	@Override
 	public int getId() {
-		return get(CONTEXT_IDENTIFIER);
+		return id;
 	}
-	private void create(int id) {
-		put(CONTEXT_IDENTIFIER, id);
+	
+	@Override
+	public BloomierContextSummary getBloomierCopy() throws TimeoutException {
+		BloomierContextSummary summary = new BloomierContextSummary(this, hashSeedHint);
+		hashSeedHint = summary.getHashSeed();
+		return summary;
 	}
 
-	private static final String CONTEXT_IDENTIFIER = "_context_identifier_id";
+	private int id;
+	private long hashSeedHint = 0;
 }

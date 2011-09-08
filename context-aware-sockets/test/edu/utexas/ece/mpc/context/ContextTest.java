@@ -14,6 +14,8 @@ import org.junit.Test;
 
 import com.esotericsoftware.minlog.Log;
 
+import edu.utexas.ece.mpc.context.net.ContextShimmedDatagramSocket;
+
 public class ContextTest {
 	public final static InetAddress BROADCAST_ADDRESS;
 	public final static int PING_PORT = 4498;
@@ -86,7 +88,7 @@ public class ContextTest {
 			id = summary.getId();
 
 			ContextHandler handler = ContextHandler.getInstance();
-			handler.addContextSummary(summary);
+			handler.addLocalContextSummary(summary);
 			
 			byte[] message = "PING MESSAGE".getBytes();
 			DatagramPacket packet = new DatagramPacket(message, message.length, BROADCAST_ADDRESS, PING_PORT);
