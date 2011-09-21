@@ -7,9 +7,10 @@ import java.util.List;
 import java.util.Random;
 
 import edu.utexas.ece.mpc.context.ContextHandler;
-import edu.utexas.ece.mpc.context.ContextSummary;
-import edu.utexas.ece.mpc.context.HashMapContextSummary;
+import edu.utexas.ece.mpc.context.logger.SysoutLoggingDelegate;
 import edu.utexas.ece.mpc.context.net.ContextShimmedDatagramSocket;
+import edu.utexas.ece.mpc.context.summary.ContextSummary;
+import edu.utexas.ece.mpc.context.summary.HashMapContextSummary;
 
 public class Node {
     private static int BASE_PORT = 5000;
@@ -54,6 +55,7 @@ public class Node {
         }
 
         ContextHandler handler = ContextHandler.getInstance();
+        handler.setLoggerDelegate(new SysoutLoggingDelegate());
         handler.addLocalContextSummary(summary);
 
         Random rand = new Random(id);
@@ -71,7 +73,9 @@ public class Node {
                     try {
                         receiveSocket.receive(packet);
 
-                        System.out.println("Received packet: " + new String(packet.getData()));
+                        System.out.println("Received packet: "
+                                           + new String(packet.getData(), packet.getOffset(),
+                                                        packet.getLength()));
                     } catch (IOException e) {
                         throw new RuntimeException(e);
                     }

@@ -8,10 +8,10 @@
                 <attribute name="Main-Class" value="Node"/>
                 <attribute name="Class-Path" value="."/>
             </manifest>
-            <fileset dir="../../context/context-test-driver/bin"/>
-            <fileset dir="../../context/context-aware-sockets/bin"/>
+            <fileset dir="bin"/>
+            <fileset dir="../context-aware-sockets/bin"/>
             <fileset dir="../../java-bloomier-filter/bin"/>
-            <zipfileset excludes="META-INF/*.SF" src="../../java-bloomier-filter/lib/kryo-1.04-all.jar"/>
+            <zipfileset excludes="META-INF/*.SF" src="../java-bloomier-filter/lib/kryo-1.04-all.jar"/>
         </jar>
     </target>
 </project>

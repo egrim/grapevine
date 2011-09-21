@@ -1,4 +1,4 @@
-package edu.utexas.ece.mpc.context;
+package edu.utexas.ece.mpc.context.serializer;
 
 import java.nio.ByteBuffer;
 
@@ -6,8 +6,12 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.serialize.ArraySerializer;
 
+import edu.utexas.ece.mpc.context.ContextHandler;
+import edu.utexas.ece.mpc.context.summary.BloomierContextSummary;
+
 public class BloomierContextSummarySerializer extends Serializer {
     private final Kryo kryo;
+    private final ContextHandler contextHandler = ContextHandler.getInstance();
 
     public BloomierContextSummarySerializer(Kryo kryo) {
         super();
@@ -50,6 +54,8 @@ public class BloomierContextSummarySerializer extends Serializer {
 
     @Override
     public <T> T readObjectData(ByteBuffer buffer, Class<T> type) {
+        int bufferStart = buffer.position();
+
         int m = kryo.readObjectData(buffer, int.class);
         int k = kryo.readObjectData(buffer, int.class);
         int q = kryo.readObjectData(buffer, int.class);
@@ -64,6 +70,11 @@ public class BloomierContextSummarySerializer extends Serializer {
 
         @SuppressWarnings("unchecked")
         T summary = (T) new BloomierContextSummary(m, k, q, hashSeed, table, id, hops, timestamp);
+
+        int summarySize = buffer.position() - bufferStart;
+        contextHandler.logDbg(String.format("Decoded context summary (size=%d): %s", summarySize,
+                                            summary));
+
         return summary;
     }
 

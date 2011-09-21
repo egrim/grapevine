@@ -1,4 +1,4 @@
-package edu.utexas.ece.mpc.context;
+package edu.utexas.ece.mpc.context.summary;
 
 import java.util.concurrent.TimeoutException;
 
@@ -59,11 +59,11 @@ public class BloomierContextSummary extends ImmutableBloomierFilter<String, Inte
     }
 
     public String toString() {
-        return "BloomierContextSummary with id=" + id + " timestamp=" + timestamp + " hops=" + hops;
+        return String.format("BloomierContextSummary with id=%d m=%d k=%d q=%d hashSeed=%d timestamp=%d hops=%d",
+                             id, m, k, q, hashSeed, timestamp, hops);
     }
 
     private int id;
     private int hops = 0;
     private long timestamp;
-
 }

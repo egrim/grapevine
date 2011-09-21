@@ -1,4 +1,4 @@
-package edu.utexas.ece.mpc.context;
+package edu.utexas.ece.mpc.context.shim;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -6,6 +6,11 @@ import java.util.ArrayList;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.ObjectBuffer;
 import com.esotericsoftware.kryo.serialize.CollectionSerializer;
+import com.esotericsoftware.minlog.Log;
+
+import edu.utexas.ece.mpc.context.ContextHandler;
+import edu.utexas.ece.mpc.context.serializer.BloomierContextSummarySerializer;
+import edu.utexas.ece.mpc.context.summary.BloomierContextSummary;
 
 public class ContextShim {
 
@@ -22,6 +27,9 @@ public class ContextShim {
         kryoSerializer = new ObjectBuffer(kryo, 256, Integer.MAX_VALUE);
 
         contextHandler = ContextHandler.getInstance();
+        if (contextHandler.isDebugEnabled()) {
+            Log.set(Log.LEVEL_DEBUG);
+        }
     }
 
     public byte[] getContextBytes() {

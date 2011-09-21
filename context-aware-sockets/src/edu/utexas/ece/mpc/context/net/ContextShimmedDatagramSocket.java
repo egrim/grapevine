@@ -8,7 +8,7 @@ import java.net.InetAddress;
 import java.net.SocketAddress;
 import java.net.SocketException;
 
-import edu.utexas.ece.mpc.context.DatagramContextShim;
+import edu.utexas.ece.mpc.context.shim.DatagramContextShim;
 
 public class ContextShimmedDatagramSocket extends DatagramSocket {
 

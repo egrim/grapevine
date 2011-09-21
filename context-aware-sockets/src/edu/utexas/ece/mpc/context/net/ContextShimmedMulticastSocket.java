@@ -5,7 +5,7 @@ import java.net.DatagramPacket;
 import java.net.MulticastSocket;
 import java.net.SocketAddress;
 
-import edu.utexas.ece.mpc.context.DatagramContextShim;
+import edu.utexas.ece.mpc.context.shim.DatagramContextShim;
 
 public class ContextShimmedMulticastSocket extends MulticastSocket {
 

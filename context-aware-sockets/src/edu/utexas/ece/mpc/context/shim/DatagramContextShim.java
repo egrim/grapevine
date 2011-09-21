@@ -1,4 +1,4 @@
-package edu.utexas.ece.mpc.context;
+package edu.utexas.ece.mpc.context.shim;
 
 import java.net.DatagramPacket;
 import java.net.SocketException;
@@ -9,7 +9,8 @@ public class DatagramContextShim extends ContextShim {
     public DatagramPacket getSendPacket(DatagramPacket p) throws SocketException {
         int payloadLength = p.getLength();
         byte[] contextBytes = getContextBytes();
-        byte[] bytesToSend = new byte[payloadLengthFieldSize + payloadLength + contextBytes.length];
+        byte[] bytesToSend = new byte[PAYLOAD_LENGTH_FIELD_SIZE + payloadLength
+                                      + contextBytes.length];
 
         ByteBuffer bytesToSendBuffer = ByteBuffer.wrap(bytesToSend);
         bytesToSendBuffer.putInt(payloadLength);
@@ -21,7 +22,7 @@ public class DatagramContextShim extends ContextShim {
 
     public DatagramPacket getReceivePacket(DatagramPacket p) {
         DatagramPacket receivePacket = new DatagramPacket(receiveBuffer, receiveBuffer.length);
-        while (receivePacket.getLength() < p.getLength() + payloadLengthFieldSize) {
+        while (receivePacket.getLength() < p.getLength() + PAYLOAD_LENGTH_FIELD_SIZE) {
             increaseReceiveBufferSize();
             receivePacket = new DatagramPacket(receiveBuffer, receiveBuffer.length);
         }
@@ -30,9 +31,20 @@ public class DatagramContextShim extends ContextShim {
     }
 
     public void processReceivedPacket(DatagramPacket receivePacket, DatagramPacket p) {
-        ByteBuffer receivedBytesBuffer = ByteBuffer.wrap(receiveBuffer);
+        ByteBuffer receivedBytesBuffer = ByteBuffer.wrap(receivePacket.getData(),
+                                                         receivePacket.getOffset(),
+                                                         receivePacket.getLength());
         int payloadLength = receivedBytesBuffer.getInt();
-        receivedBytesBuffer.get(p.getData(), p.getOffset(), Math.min(payloadLength, p.getLength()));
+        byte[] payloadData = new byte[payloadLength];
+        receivedBytesBuffer.get(payloadData);
+
+        int packetLength;
+        int packetOffset = p.getOffset();
+        byte[] packetData = p.getData();
+        for (packetLength = 0; packetLength < p.getLength() && packetLength < payloadLength; packetLength++) {
+            packetData[packetOffset + packetLength] = payloadData[packetLength];
+        }
+        p.setLength(payloadLength);
 
         try {
             processContextBytes(receivedBytesBuffer);
@@ -47,7 +59,7 @@ public class DatagramContextShim extends ContextShim {
         System.out.println("Receive buffer size incrase to " + receiveBuffer.length);
     }
 
-    private static final int payloadLengthFieldSize = Integer.SIZE / Byte.SIZE;
+    private static final int PAYLOAD_LENGTH_FIELD_SIZE = Integer.SIZE / Byte.SIZE;
 
     private byte[] receiveBuffer = new byte[DEFAULT_RECEIVE_PACKET_SIZE];
     private static final int DEFAULT_RECEIVE_PACKET_SIZE = 2 * 1024;

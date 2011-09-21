@@ -15,6 +15,7 @@ import org.junit.Test;
 import com.esotericsoftware.minlog.Log;
 
 import edu.utexas.ece.mpc.context.net.ContextShimmedDatagramSocket;
+import edu.utexas.ece.mpc.context.summary.HashMapContextSummary;
 
 public class ContextTest {
     public final static InetAddress BROADCAST_ADDRESS;

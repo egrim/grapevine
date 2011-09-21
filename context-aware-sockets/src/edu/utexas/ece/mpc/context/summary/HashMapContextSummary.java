@@ -1,4 +1,4 @@
-package edu.utexas.ece.mpc.context;
+package edu.utexas.ece.mpc.context.summary;
 
 import java.net.NetworkInterface;
 import java.net.SocketException;
