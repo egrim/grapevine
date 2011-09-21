@@ -30,7 +30,6 @@ public class BloomierContextSummarySerializer extends Serializer {
     public void writeObjectData(ByteBuffer buffer, Object object) {
         BloomierContextSummary summary = (BloomierContextSummary) object;
 
-        int m = summary.getM();
         int k = summary.getK();
         int q = summary.getQ();
 
@@ -42,7 +41,6 @@ public class BloomierContextSummarySerializer extends Serializer {
         int hops = summary.getHops();
         long timestamp = summary.getTimestamp();
 
-        kryo.writeObjectData(buffer, m);
         kryo.writeObjectData(buffer, k);
         kryo.writeObjectData(buffer, q);
         kryo.writeObjectData(buffer, hashSeed);
@@ -56,13 +54,13 @@ public class BloomierContextSummarySerializer extends Serializer {
     public <T> T readObjectData(ByteBuffer buffer, Class<T> type) {
         int bufferStart = buffer.position();
 
-        int m = kryo.readObjectData(buffer, int.class);
         int k = kryo.readObjectData(buffer, int.class);
         int q = kryo.readObjectData(buffer, int.class);
 
         long hashSeed = kryo.readObjectData(buffer, long.class);
 
         byte[][] table = kryo.readObjectData(buffer, byte[][].class);
+        int m = table.length;
 
         int id = kryo.readObjectData(buffer, int.class);
         int hops = kryo.readObjectData(buffer, int.class);
