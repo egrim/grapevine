@@ -41,7 +41,7 @@ public class ContextShim {
         @SuppressWarnings("unchecked")
         ArrayList<BloomierContextSummary> summaries = (ArrayList<BloomierContextSummary>) kryo.readObjectData(buffer,
                                                                                                               ArrayList.class);
-        contextHandler.addOrUpdateReceivedSummaries(summaries);
+        contextHandler.putReceivedSummaries(summaries);
     }
 
     private ContextHandler contextHandler;

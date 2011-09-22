@@ -50,6 +50,13 @@ public class HashMapContextSummary extends HashMap<String, Integer> implements C
         this.id = id;
     }
 
+    public HashMapContextSummary(HashMapContextSummary summary) {
+        super(summary);
+
+        this.id = summary.id;
+        this.hashSeedHint = summary.hashSeedHint;
+    }
+
     @Override
     public Integer get(String key) {
         return super.get(key);

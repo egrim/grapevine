@@ -3,32 +3,37 @@ package edu.utexas.ece.mpc.context;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Observable;
 import java.util.Observer;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeoutException;
-
 
 import edu.utexas.ece.mpc.context.logger.ContextLoggingDelegate;
 import edu.utexas.ece.mpc.context.logger.NullContextLogger;
 import edu.utexas.ece.mpc.context.summary.BloomierContextSummary;
 import edu.utexas.ece.mpc.context.summary.ContextSummary;
+import edu.utexas.ece.mpc.context.summary.HashMapContextSummary;
 
-public class ContextHandler extends Observable {
-    private static final int TAU = 3; // TODO: TAU should not be hard-coded
+public class ContextHandler {
+    private static final int DEFAULT_TAU = 3;
 
     private static ContextHandler me;
 
-    private Map<Integer, ContextSummary> localSummaries = new HashMap<Integer, ContextSummary>();
-    private Map<Integer, BloomierContextSummary> receivedSummaries = new HashMap<Integer, BloomierContextSummary>();
+    private Map<Integer, HashMapContextSummary> localSummaries = new ConcurrentHashMap<Integer, HashMapContextSummary>();
+    private Map<Integer, BloomierContextSummary> receivedSummaries = new ConcurrentHashMap<Integer, BloomierContextSummary>();
 
     private ContextLoggingDelegate loggingDelegate = new NullContextLogger();
 
+    private ContextObservable preReceivedSummaryUpdateHook = new ContextObservable();
+    private ContextObservable postReceivedSummaryUpdateHook = new ContextObservable();
+
+    private int tau;
+
     // Note: Hide constructor (singleton pattern)
     private ContextHandler() {
-
+        tau = DEFAULT_TAU;
     }
 
     public static synchronized ContextHandler getInstance() {
@@ -39,20 +44,15 @@ public class ContextHandler extends Observable {
         return me;
     }
 
-    // FIXME: synchronized all methods that access summaries for multithreaded simulation - may instead want to use
-    // concurrent versions of the underlying maps
-
-    // TODO: may want to change this so that the context summary must be explicitly updated (i.e.: make a copy instead
-    // of storing the original reference passed)
-    public synchronized void addLocalContextSummary(ContextSummary summary) {
+    public void putLocalContextSummary(HashMapContextSummary summary) {
         Integer id = summary.getId();
-        localSummaries.put(id, summary);
+        localSummaries.put(id, new HashMapContextSummary(summary));
 
         logDbg("Added local summary: " + summary);
     }
 
-    public synchronized void addOrUpdateReceivedSummaries(Collection<BloomierContextSummary> summaries) {
-        Collection<Integer> idsUpdated = new HashSet<Integer>();
+    public void putReceivedSummaries(Collection<BloomierContextSummary> summaries) {
+        Map<Integer, BloomierContextSummary> summariesToPut = new HashMap<Integer, BloomierContextSummary>();
 
         logDbg("Adding/updating received summaries");
         for (BloomierContextSummary summary : summaries) {
@@ -73,19 +73,27 @@ public class ContextHandler extends Observable {
 
             // Bump hop counter
             summary.incrementHops();
-            receivedSummaries.put(id, summary);
-            logDbg("Added/updated summary: " + summary);
-
-            idsUpdated.add(id);
+            summariesToPut.put(id, summary);
+            logDbg("Summary marked for add/update: " + summary);
         }
 
-        if (!idsUpdated.isEmpty()) {
-            setChanged();
-            notifyObservers(idsUpdated);
+        if (!summariesToPut.isEmpty()) {
+            preReceivedSummaryUpdateHook.setChanged();
+            preReceivedSummaryUpdateHook.notifyObservers(summariesToPut);
+        }
+        
+        receivedSummaries.putAll(summariesToPut);
+        for (ContextSummary sum: summariesToPut.values()) {
+            logDbg("Summary put in receivedSummaries: " + sum);
+        }
+
+        if (!summariesToPut.isEmpty()) {
+            postReceivedSummaryUpdateHook.setChanged();
+            postReceivedSummaryUpdateHook.notifyObservers(summariesToPut);
         }
     }
 
-    public synchronized ContextSummary get(int id) {
+    public ContextSummary get(int id) {
         ContextSummary summary;
 
         summary = localSummaries.get(id);
@@ -105,7 +113,7 @@ public class ContextHandler extends Observable {
         return summary.get(key);
     }
 
-    public synchronized ArrayList<BloomierContextSummary> getSummariesToSend() {
+    public ArrayList<BloomierContextSummary> getSummariesToSend() {
         ArrayList<BloomierContextSummary> bloomierSummaries = new ArrayList<BloomierContextSummary>(
                                                                                                     localSummaries.size()
                                                                                                             + receivedSummaries.size());
@@ -120,7 +128,7 @@ public class ContextHandler extends Observable {
         }
 
         for (BloomierContextSummary summary : receivedSummaries.values()) {
-            if (summary.getHops() < TAU) {
+            if (summary.getHops() < tau) {
                 bloomierSummaries.add(summary);
             }
         }
@@ -139,8 +147,18 @@ public class ContextHandler extends Observable {
         return new ArrayList<ContextSummary>(receivedSummaries.values());
     }
 
+    public void resetAllSummaryData() {
+        localSummaries.clear();
+        receivedSummaries.clear();
+        logDbg("All summary data reset");
+    }
+
     public void setLoggerDelegate(ContextLoggingDelegate delegate) {
         loggingDelegate = delegate;
+    }
+
+    public void setTau(int newTau) {
+        tau = newTau;
     }
 
     public void log(String msg) {
@@ -159,7 +177,20 @@ public class ContextHandler extends Observable {
         return loggingDelegate.isDebugEnabled();
     }
 
-    public static interface ContextHandlerObserver extends Observer {
-        public void update(ContextHandler handler, Collection<Integer> idsUpdated);
+    public void addPreReceivedSummariesUpdateObserver(Observer observer) {
+        preReceivedSummaryUpdateHook.addObserver(observer);
     }
+
+    public void addPostReceiveSummariesUpdateObserver(Observer observer) {
+        postReceivedSummaryUpdateHook.addObserver(observer);
+    }
+
+    private class ContextObservable extends Observable {
+        // Make setChanged visible within the parent class
+        @Override
+        protected synchronized void setChanged() {
+            super.setChanged();
+        }
+    }
+
 }

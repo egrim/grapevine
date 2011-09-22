@@ -17,7 +17,8 @@ public class BloomierContextSummary extends ImmutableBloomierFilter<String, Inte
             throws TimeoutException {
         super(other, // FIXME: magic numbers here (probably should be tunable
                      // through constructor with sane defaults)
-              (int) (other.keySet().size() * 1.20), // make m 20% bigger than it needs to be
+              Math.max(1, (int) (other.keySet().size() * 1.20)), // make m 20% bigger than it needs to be (but at least
+                                                                 // 1)
               Math.max(1, (int) (other.keySet().size() * 1.20 * 0.03)), // make k 3% of m (but at least 1)
               (int) (Integer.SIZE * 1.30), // make q 30% bigger than the Integers stored in it
               Integer.class, 10000, // don't take more than 10 seconds to make the structure
