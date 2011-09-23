@@ -4,7 +4,6 @@ import java.nio.ByteBuffer;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.Serializer;
-import com.esotericsoftware.kryo.serialize.ArraySerializer;
 
 import edu.utexas.ece.mpc.context.ContextHandler;
 import edu.utexas.ece.mpc.context.summary.BloomierContextSummary;
@@ -15,13 +14,6 @@ public class BloomierContextSummarySerializer extends Serializer {
 
     public BloomierContextSummarySerializer(Kryo kryo) {
         super();
-
-        ArraySerializer arraySerializer = new ArraySerializer(kryo);
-        arraySerializer.setDimensionCount(2);
-        arraySerializer.setElementsAreSameType(true);
-        arraySerializer.setCanBeNull(false);
-
-        kryo.register(byte[][].class, arraySerializer);
 
         this.kryo = kryo;
     }
@@ -36,6 +28,8 @@ public class BloomierContextSummarySerializer extends Serializer {
         long hashSeed = summary.getHashSeed();
 
         byte[][] table = summary.getTable();
+        int tableDimension1 = table.length;
+        int tableDimension2 = tableDimension1 > 0 ? table[0].length : 0;
 
         int id = summary.getId();
         int hops = summary.getHops();
@@ -44,7 +38,16 @@ public class BloomierContextSummarySerializer extends Serializer {
         kryo.writeObjectData(buffer, k);
         kryo.writeObjectData(buffer, q);
         kryo.writeObjectData(buffer, hashSeed);
-        kryo.writeObjectData(buffer, table);
+
+        // Kryo's ArraySerializer isn't as efficient as the following (even using all possible tuning)
+        kryo.writeObjectData(buffer, tableDimension1);
+        kryo.writeObjectData(buffer, tableDimension2);
+        for (byte[] subArray: table) {
+            for (byte element: subArray) {
+                kryo.writeObjectData(buffer, element);
+            }
+        }
+
         kryo.writeObjectData(buffer, id);
         kryo.writeObjectData(buffer, hops);
         kryo.writeObjectData(buffer, timestamp);
@@ -59,7 +62,15 @@ public class BloomierContextSummarySerializer extends Serializer {
 
         long hashSeed = kryo.readObjectData(buffer, long.class);
 
-        byte[][] table = kryo.readObjectData(buffer, byte[][].class);
+        int tableDimension1 = kryo.readObjectData(buffer, int.class);
+        int tableDimension2 = kryo.readObjectData(buffer, int.class);
+        byte[][] table = new byte[tableDimension1][tableDimension2];
+        for (int i = 0; i < tableDimension1; i++) {
+            for (int j = 0; j < tableDimension2; j++) {
+                table[i][j] = kryo.readObjectData(buffer, byte.class);
+            }
+        }
+
         int m = table.length;
 
         int id = kryo.readObjectData(buffer, int.class);

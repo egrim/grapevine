@@ -19,9 +19,10 @@ public class BloomierContextSummary extends ImmutableBloomierFilter<String, Inte
                      // through constructor with sane defaults)
               Math.max(1, (int) (other.keySet().size() * 1.20)), // make m 20% bigger than it needs to be (but at least
                                                                  // 1)
-              Math.max(1, (int) (other.keySet().size() * 1.20 * 0.03)), // make k 3% of m (but at least 1)
+              // Math.max(1, (int) (other.keySet().size() * 1.20 * 0.03)), // make k 3% of m (but at least 1)
+              3, // 3 seems to work best from tweaking attempts
               (int) (Integer.SIZE * 1.30), // make q 30% bigger than the Integers stored in it
-              Integer.class, 10000, // don't take more than 10 seconds to make the structure
+              Integer.class, Integer.MAX_VALUE, // don't take more than 10 seconds to make the structure
               hashSeedHint);
 
         id = other.getId();
@@ -59,6 +60,7 @@ public class BloomierContextSummary extends ImmutableBloomierFilter<String, Inte
         return new BloomierContextSummary(this);
     }
 
+    @Override
     public String toString() {
         return String.format("BloomierContextSummary with id=%d m=%d k=%d q=%d hashSeed=%d timestamp=%d hops=%d",
                              id, m, k, q, hashSeed, timestamp, hops);

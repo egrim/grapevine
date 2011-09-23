@@ -74,6 +74,11 @@ public class HashMapContextSummary extends HashMap<String, Integer> implements C
         return summary;
     }
 
+    @Override
+    public String toString() {
+        return String.format("HashMapContextSummary with id=%d", id);
+    }
+
     private int id;
     private long hashSeedHint = 0;
 }

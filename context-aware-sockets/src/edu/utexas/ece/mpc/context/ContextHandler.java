@@ -44,11 +44,18 @@ public class ContextHandler {
         return me;
     }
 
-    public void putLocalContextSummary(HashMapContextSummary summary) {
+    public void putLocalSummary(HashMapContextSummary summary) {
         Integer id = summary.getId();
         localSummaries.put(id, new HashMapContextSummary(summary));
 
         logDbg("Added local summary: " + summary);
+    }
+
+    public void removeLocalSummary(HashMapContextSummary summary) {
+        Integer id = summary.getId();
+        localSummaries.remove(id);
+        
+        logDbg("Removed local summary: " + summary);
     }
 
     public void putReceivedSummaries(Collection<BloomierContextSummary> summaries) {
@@ -160,7 +167,7 @@ public class ContextHandler {
     public void setTau(int newTau) {
         tau = newTau;
     }
-
+    
     public void log(String msg) {
         loggingDelegate.log(msg);
     }

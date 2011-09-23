@@ -16,6 +16,9 @@ import java.util.Random;
 
 public class ContextTestDriver implements Runnable {
 
+    private static final int DEFAULT_FILL_ITEMS = 100;
+    private static InetAddress BROADCAST_ADDRESS;
+
     private int numNodes;
     private float connectivityRadius;
     private long seed;
@@ -23,8 +26,8 @@ public class ContextTestDriver implements Runnable {
 
     private Random rand;
     private int runtime;
-
-    private static InetAddress BROADCAST_ADDRESS;
+    private boolean skipFirst;
+    private int fillItems;
 
     static {
         InetAddress broadcastAddress = null;
@@ -64,11 +67,14 @@ public class ContextTestDriver implements Runnable {
         BROADCAST_ADDRESS = broadcastAddress;
     }
 
-    public ContextTestDriver(int numNodes, float connectivityRadius, int runtime, long seed) {
+    public ContextTestDriver(int numNodes, float connectivityRadius, int runtime, int fillItems,
+                             long seed, boolean skipFirst) {
         this.numNodes = numNodes;
         this.connectivityRadius = connectivityRadius;
         this.runtime = runtime;
+        this.fillItems = fillItems;
         this.seed = seed;
+        this.skipFirst = skipFirst;
 
         rand = new Random(seed);
     }
@@ -127,59 +133,69 @@ public class ContextTestDriver implements Runnable {
 
         System.out.println("Starting beacon for each node");
         try {
-            for (final NodeInfo node : nodes) {
-                List<String> command = new ArrayList<String>();
-                command.add("java");
-                command.add("-jar");
-                command.add("node.jar");
-                command.add(Integer.valueOf(node.id).toString());
-                command.add(Double.valueOf(node.x).toString());
-                command.add(Double.valueOf(node.x).toString());
-                command.add(BROADCAST_ADDRESS.toString().substring(1));
+            try {
+                for (final NodeInfo node: nodes) {
+                    List<String> command = new ArrayList<String>();
+                    command.add("java");
+                    command.add("-jar");
+                    command.add("node.jar");
+                    command.add(Integer.valueOf(node.id).toString());
+                    command.add(Double.valueOf(node.x).toString());
+                    command.add(Double.valueOf(node.x).toString());
+                    command.add(Integer.valueOf(fillItems).toString());
+                    command.add(BROADCAST_ADDRESS.toString().substring(1));
 
-                for (int neighbor : node.neighbors) {
-                    command.add(Integer.valueOf(neighbor).toString());
-                }
-                System.out.println("Starting process - command=" + command.toString());
-
-                final Process process = new ProcessBuilder(command).redirectErrorStream(true)
-                                                                   .start();
-
-                node.process = process;
-                node.processIoHandlerThread = new Thread(new Runnable() {
-
-                    @Override
-                    public void run() {
-                        try {
-                            InputStream in = process.getInputStream();
-                            InputStreamReader isr = new InputStreamReader(in);
-                            BufferedReader br = new BufferedReader(isr);
-                            String line;
-                            while ((line = br.readLine()) != null) {
-                                System.out.printf("[%s] %s\n", node.id, line);
-                            }
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        }
+                    for (int neighbor: node.neighbors) {
+                        command.add(Integer.valueOf(neighbor).toString());
                     }
-                });
-                node.processIoHandlerThread.setDaemon(true);
-                node.processIoHandlerThread.start();
+
+                    // Handle skipFirst
+                    if (skipFirst && node.id == 0) {
+                        System.out.println("Skipping first node, command needed: " + command);
+                        continue;
+                    }
+
+                    System.out.println("Starting process - command=" + command.toString());
+
+                    final Process process = new ProcessBuilder(command).redirectErrorStream(true)
+                                                                       .start();
+
+                    node.process = process;
+                    node.processIoHandlerThread = new Thread(new Runnable() {
+
+                        @Override
+                        public void run() {
+                            try {
+                                InputStream in = process.getInputStream();
+                                InputStreamReader isr = new InputStreamReader(in);
+                                BufferedReader br = new BufferedReader(isr);
+                                String line;
+                                while ((line = br.readLine()) != null) {
+                                    System.out.printf("[%s] %s\n", node.id, line);
+                                }
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            }
+                        }
+                    });
+                    node.processIoHandlerThread.setDaemon(true);
+                    node.processIoHandlerThread.start();
+                }
+            } catch (IOException e) {
+                throw new RuntimeException("Problem starting node", e);
             }
-        } catch (IOException e) {
-            throw new RuntimeException("Problem starting node", e);
+            try {
+                Thread.sleep(runtime);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        } finally {
+            for (NodeInfo node: nodes) {
+                if (node.process != null) {
+                    node.process.destroy();
+                }
+            }
         }
-
-        try {
-            Thread.sleep(runtime);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
-
-        for (NodeInfo node : nodes) {
-            node.process.destroy();
-        }
-
     }
 
     private class NodeInfo {
@@ -229,9 +245,16 @@ public class ContextTestDriver implements Runnable {
             System.exit(-1);
         }
 
+        int fillItems = DEFAULT_FILL_ITEMS;
+        try {
+            fillItems = Integer.valueOf(args[3]);
+        } catch (Exception e) {
+            // Ignore
+        }
+
         long seed = 0;
         try {
-            seed = Long.valueOf(args[3]);
+            seed = Long.valueOf(args[4]);
         } catch (ArrayIndexOutOfBoundsException e) {
             seed = new Random().nextLong();
         } catch (Exception e) {
@@ -239,8 +262,19 @@ public class ContextTestDriver implements Runnable {
             System.exit(-1);
         }
 
+        boolean skipFirst = false;
+        try {
+            skipFirst = Boolean.valueOf(args[5]);
+        } catch (ArrayIndexOutOfBoundsException e) {
+            // Ignore (just use default value)
+        } catch (Exception e) {
+            System.err.println("Could not interpret skipFirst argument: " + e);
+            System.exit(-1);
+        }
+
         ContextTestDriver simulation = new ContextTestDriver(numNodes, connectivityRadius, runtime,
-                                                             seed);
+                                                             fillItems,
+                                                             seed, skipFirst);
         simulation.run();
     }
 

@@ -92,7 +92,7 @@ public class ContextTest {
             id = summary.getId();
 
             ContextHandler handler = ContextHandler.getInstance();
-            handler.putLocalContextSummary(summary);
+            handler.putLocalSummary(summary);
 
             byte[] message = "PING MESSAGE".getBytes();
             DatagramPacket packet = new DatagramPacket(message, message.length, BROADCAST_ADDRESS,

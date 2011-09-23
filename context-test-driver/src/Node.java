@@ -14,26 +14,27 @@ import edu.utexas.ece.mpc.context.summary.HashMapContextSummary;
 
 public class Node {
     private static int BASE_PORT = 5000;
-    private static int NUM_FILL_ENTRIES = 100;
 
     public static void main(String[] args) throws Exception {
         int id = 0;
         double x = 0;
         double y = 0;
+        int fillItems = 0;
         InetAddress address = null;
         try {
             id = Integer.valueOf(args[0]);
             x = Double.valueOf(args[1]);
             y = Double.valueOf(args[2]);
-            address = InetAddress.getByName(args[3]);
+            fillItems = Integer.valueOf(args[3]);
+            address = InetAddress.getByName(args[4]);
         } catch (Exception e) {
-            System.out.println("Usage: <Node.class> <id> <x> <y> <sendAdress> <connectedToId> [<connectedToId]*");
+            System.out.println("Usage: <Node.class> <id> <x> <y> <fillItems> <sendAdress> <connectedToId> [<connectedToId]*");
             System.exit(-1);
         }
 
         String[] connectedToIdArgs;
         try {
-            connectedToIdArgs = Arrays.copyOfRange(args, 4, args.length);
+            connectedToIdArgs = Arrays.copyOfRange(args, 5, args.length);
         } catch (ArrayIndexOutOfBoundsException e) {
             connectedToIdArgs = new String[0];
         }
@@ -44,8 +45,8 @@ public class Node {
         }
 
         System.out.println("Starting node with id=" + id + " position=(" + x + ":" + y
-                           + ") sending to " + address + " connected to nodes "
-                           + Arrays.toString(connectedToIds));
+                           + ") fillItems=" + fillItems + " sending to " + address
+                           + " connected to nodes " + Arrays.toString(connectedToIds));
 
         HashMapContextSummary summary = new HashMapContextSummary(id);
         summary.put("location: x", (int) (x * 100000));
@@ -54,14 +55,14 @@ public class Node {
             summary.put("neighbor: " + i, connectedToIds[i]);
         }
 
-        ContextHandler handler = ContextHandler.getInstance();
-        handler.setLoggerDelegate(new SysoutLoggingDelegate());
-        handler.addLocalContextSummary(summary);
-
         Random rand = new Random(id);
-        for (int i = 0; i < NUM_FILL_ENTRIES; i++) {
+        for (int i = 0; i < fillItems; i++) {
             summary.put("fill: " + i, rand.nextInt());
         }
+
+        ContextHandler handler = ContextHandler.getInstance();
+        handler.setLoggerDelegate(new SysoutLoggingDelegate());
+        handler.putLocalSummary(summary);
 
         final DatagramSocket receiveSocket = new ContextShimmedDatagramSocket(BASE_PORT + id);
         Thread receiver = new Thread(new Runnable() {
