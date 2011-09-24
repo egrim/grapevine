@@ -65,21 +65,23 @@ public class ContextHandler {
         for (BloomierContextSummary summary : summaries) {
             int id = summary.getId();
 
+            // Bump hop counter
+            summary.incrementHops();
+
             // Is received summary local?
             if (localSummaries.containsKey(id)) {
                 logDbg("Skipping summary (local): " + summary);
                 continue;
             }
 
-            // Is received summary old?
+            // Is received summary not new or from a closer hop?
             if (receivedSummaries.containsKey(id)
-                && summary.getTimestamp() <= receivedSummaries.get(id).getTimestamp()) {
-                logDbg("Skipping summary (old): " + summary);
+                && summary.getTimestamp() <= receivedSummaries.get(id).getTimestamp()
+                && summary.getHops() >= receivedSummaries.get(id).getHops()) {
+                logDbg("Skipping summary (not new or with less hops): " + summary);
                 continue;
             }
 
-            // Bump hop counter
-            summary.incrementHops();
             summariesToPut.put(id, summary);
             logDbg("Summary marked for add/update: " + summary);
         }
