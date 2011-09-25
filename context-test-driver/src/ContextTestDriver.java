@@ -141,7 +141,7 @@ public class ContextTestDriver implements Runnable {
                     command.add("node.jar");
                     command.add(Integer.valueOf(node.id).toString());
                     command.add(Double.valueOf(node.x).toString());
-                    command.add(Double.valueOf(node.x).toString());
+                    command.add(Double.valueOf(node.y).toString());
                     command.add(Integer.valueOf(fillItems).toString());
                     command.add(BROADCAST_ADDRESS.toString().substring(1));
 

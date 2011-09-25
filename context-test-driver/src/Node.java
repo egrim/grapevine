@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Random;
 
 import edu.utexas.ece.mpc.context.ContextHandler;
+import edu.utexas.ece.mpc.context.ContextHandler.WireSummaryType;
 import edu.utexas.ece.mpc.context.logger.SysoutLoggingDelegate;
 import edu.utexas.ece.mpc.context.net.ContextShimmedDatagramSocket;
 import edu.utexas.ece.mpc.context.summary.ContextSummary;
@@ -61,6 +62,8 @@ public class Node {
         }
 
         ContextHandler handler = ContextHandler.getInstance();
+        handler.setWireSummaryType(WireSummaryType.LABELED);
+        // handler.setWireSummaryType(WireSummaryType.BLOOMIER);
         handler.setLoggerDelegate(new SysoutLoggingDelegate());
         handler.putLocalSummary(summary);
 

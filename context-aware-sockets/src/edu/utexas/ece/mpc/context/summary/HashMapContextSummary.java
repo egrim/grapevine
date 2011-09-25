@@ -5,7 +5,6 @@ import java.net.SocketException;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.UUID;
-import java.util.concurrent.TimeoutException;
 
 @SuppressWarnings("serial")
 public class HashMapContextSummary extends HashMap<String, Integer> implements ContextSummary {
@@ -67,11 +66,12 @@ public class HashMapContextSummary extends HashMap<String, Integer> implements C
         return id;
     }
 
-    @Override
-    public BloomierContextSummary getBloomierCopy() throws TimeoutException {
-        BloomierContextSummary summary = new BloomierContextSummary(this, hashSeedHint);
-        hashSeedHint = summary.getHashSeed();
-        return summary;
+    public long getHashSeedHint() {
+        return hashSeedHint;
+    }
+
+    public void setHashSeedHint(long hashSeedHint) {
+        this.hashSeedHint = hashSeedHint;
     }
 
     @Override

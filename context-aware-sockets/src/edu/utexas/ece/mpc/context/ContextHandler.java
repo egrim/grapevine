@@ -8,21 +8,24 @@ import java.util.Map;
 import java.util.Observable;
 import java.util.Observer;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeoutException;
 
 import edu.utexas.ece.mpc.context.logger.ContextLoggingDelegate;
 import edu.utexas.ece.mpc.context.logger.NullContextLogger;
-import edu.utexas.ece.mpc.context.summary.BloomierContextSummary;
 import edu.utexas.ece.mpc.context.summary.ContextSummary;
 import edu.utexas.ece.mpc.context.summary.HashMapContextSummary;
+import edu.utexas.ece.mpc.context.summary.WireContextSummary;
 
 public class ContextHandler {
+    public static enum WireSummaryType {
+        BLOOMIER, LABELED
+    }
+
     private static final int DEFAULT_TAU = 3;
 
     private static ContextHandler me;
 
     private Map<Integer, HashMapContextSummary> localSummaries = new ConcurrentHashMap<Integer, HashMapContextSummary>();
-    private Map<Integer, BloomierContextSummary> receivedSummaries = new ConcurrentHashMap<Integer, BloomierContextSummary>();
+    private Map<Integer, WireContextSummary> receivedSummaries = new ConcurrentHashMap<Integer, WireContextSummary>();
 
     private ContextLoggingDelegate loggingDelegate = new NullContextLogger();
 
@@ -30,10 +33,16 @@ public class ContextHandler {
     private ContextObservable postReceivedSummaryUpdateHook = new ContextObservable();
 
     private int tau;
+    
+    private WireSummaryType wireSummaryType = WireSummaryType.BLOOMIER;
 
     // Note: Hide constructor (singleton pattern)
     private ContextHandler() {
-        tau = DEFAULT_TAU;
+        this(DEFAULT_TAU);
+    }
+
+    private ContextHandler(int tau) {
+        this.tau = tau;
     }
 
     public static synchronized ContextHandler getInstance() {
@@ -58,11 +67,11 @@ public class ContextHandler {
         logDbg("Removed local summary: " + summary);
     }
 
-    public void putReceivedSummaries(Collection<BloomierContextSummary> summaries) {
-        Map<Integer, BloomierContextSummary> summariesToPut = new HashMap<Integer, BloomierContextSummary>();
+    public void putReceivedSummaries(Collection<WireContextSummary> summaries) {
+        Map<Integer, WireContextSummary> summariesToPut = new HashMap<Integer, WireContextSummary>();
 
         logDbg("Adding/updating received summaries");
-        for (BloomierContextSummary summary : summaries) {
+        for (WireContextSummary summary: summaries) {
             int id = summary.getId();
 
             // Bump hop counter
@@ -82,8 +91,14 @@ public class ContextHandler {
                 continue;
             }
 
+            // Is received summary over the hop limit?
+            if (summary.getHops() > tau) {
+                logDbg("Skipping summary (over the hop limit)");
+                continue;
+            }
+
             summariesToPut.put(id, summary);
-            logDbg("Summary marked for add/update: " + summary);
+            logDbg("Marking  summary for add/update: " + summary);
         }
 
         if (!summariesToPut.isEmpty()) {
@@ -122,34 +137,19 @@ public class ContextHandler {
         return summary.get(key);
     }
 
-    public ArrayList<BloomierContextSummary> getSummariesToSend() {
-        ArrayList<BloomierContextSummary> bloomierSummaries = new ArrayList<BloomierContextSummary>(
-                                                                                                    localSummaries.size()
-                                                                                                            + receivedSummaries.size());
+    public ArrayList<ContextSummary> getSummariesToSend() {
+        ArrayList<ContextSummary> summaries = new ArrayList<ContextSummary>(
+                                                                            localSummaries.size()
+                                                                                    + receivedSummaries.size());
+        summaries.addAll(localSummaries.values());
+        summaries.addAll(receivedSummaries.values());
 
-        for (ContextSummary summary : localSummaries.values()) {
-            try {
-                bloomierSummaries.add(summary.getBloomierCopy());
-            } catch (TimeoutException e) {
-                System.err.println("Warning: A local summary could not be added");
-                e.printStackTrace();
-            }
+        logDbg("Prepared outgoing summaries:");
+        for (ContextSummary summary: summaries) {
+            logDbg("  " + summary);
         }
 
-        for (BloomierContextSummary summary : receivedSummaries.values()) {
-            if (summary.getHops() < tau) {
-                bloomierSummaries.add(summary);
-            }
-        }
-
-        StringBuilder builder = new StringBuilder("Prepared outgoing summaries:\n");
-        for (ContextSummary summary : bloomierSummaries) {
-            builder.append("  " + summary + "\n");
-        }
-
-        logDbg(builder.toString());
-
-        return bloomierSummaries;
+        return summaries;
     }
 
     public List<ContextSummary> getReceivedSummaries() {
@@ -168,6 +168,12 @@ public class ContextHandler {
 
     public void setTau(int newTau) {
         tau = newTau;
+
+        for (WireContextSummary summary: receivedSummaries.values()) {
+            if (summary.getHops() >= tau) {
+                receivedSummaries.remove(summary.getId());
+            }
+        }
     }
     
     public void log(String msg) {
@@ -200,6 +206,14 @@ public class ContextHandler {
         protected synchronized void setChanged() {
             super.setChanged();
         }
+    }
+
+    public WireSummaryType getWireSummaryType() {
+        return wireSummaryType;
+    }
+
+    public void setWireSummaryType(WireSummaryType type) {
+        wireSummaryType = type;
     }
 
 }
