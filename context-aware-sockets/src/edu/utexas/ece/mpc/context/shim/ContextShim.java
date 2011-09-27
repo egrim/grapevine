@@ -11,21 +11,25 @@ import com.esotericsoftware.minlog.Log;
 import edu.utexas.ece.mpc.context.ContextHandler;
 import edu.utexas.ece.mpc.context.serializer.BloomierContextSummarySerializer;
 import edu.utexas.ece.mpc.context.serializer.LabeledContextSummarySerializer;
+import edu.utexas.ece.mpc.context.summary.BloomierContextSummary;
 import edu.utexas.ece.mpc.context.summary.ContextSummary;
 import edu.utexas.ece.mpc.context.summary.HashMapContextSummary;
+import edu.utexas.ece.mpc.context.summary.LabeledContextSummary;
 import edu.utexas.ece.mpc.context.summary.WireContextSummary;
 
 public class ContextShim {
 
-    private ContextHandler contextHandler;
-    private Kryo kryo;
-    private ObjectBuffer buffer;
+    protected ContextHandler contextHandler;
+    protected Kryo kryo;
+    protected ObjectBuffer buffer;
 
     public ContextShim() {
         kryo = new Kryo();
         kryo.register(ArrayList.class, new ContextSummarySerializer());
+        kryo.register(BloomierContextSummary.class, new BloomierContextSummarySerializer(kryo));
+        kryo.register(LabeledContextSummary.class, new LabeledContextSummarySerializer(kryo));
 
-        buffer = new ObjectBuffer(kryo, 256, Integer.MAX_VALUE);
+        buffer = new ObjectBuffer(kryo, 2 * 1024, Integer.MAX_VALUE);
 
         contextHandler = ContextHandler.getInstance();
 
@@ -35,7 +39,7 @@ public class ContextShim {
     }
 
     public byte[] getContextBytes() {
-        ArrayList<ContextSummary> summaries = contextHandler.getSummariesToSend();
+        ArrayList<WireContextSummary> summaries = contextHandler.getSummariesToSend();
         return buffer.writeObjectData(summaries);
     }
 
@@ -43,14 +47,10 @@ public class ContextShim {
         @SuppressWarnings("unchecked")
         ArrayList<WireContextSummary> summaries = (ArrayList<WireContextSummary>) kryo.readObjectData(buffer,
                                                                                                               ArrayList.class);
-        contextHandler.putReceivedSummaries(summaries);
+        contextHandler.handleIncomingSummaries(summaries);
     }
 
     private class ContextSummarySerializer extends Serializer {
-        private BloomierContextSummarySerializer bloomierSerializer = new BloomierContextSummarySerializer(
-                                                                                                           kryo);
-        private LabeledContextSummarySerializer labeledSerializer = new LabeledContextSummarySerializer(
-                                                                                                        kryo);
 
         @Override
         public void writeObjectData(ByteBuffer buffer, Object object) {
@@ -58,8 +58,6 @@ public class ContextShim {
             ArrayList<ContextSummary> summaries = (ArrayList<ContextSummary>) object;
             
             kryo.writeObjectData(buffer, summaries.size());
-
-            updateWireSummarySerializationConfig();
 
             for (ContextSummary summary: summaries) {
                 kryo.writeObjectData(buffer, summary);
@@ -87,10 +85,10 @@ public class ContextShim {
             Serializer serializer = null;
             switch (contextHandler.getWireSummaryType()) {
                 case BLOOMIER:
-                    serializer = bloomierSerializer;
+                    serializer = kryo.getSerializer(BloomierContextSummary.class);
                     break;
                 case LABELED:
-                    serializer = labeledSerializer;
+                    serializer = kryo.getSerializer(LabeledContextSummary.class);
                     break;
             }
             return serializer;
@@ -99,6 +97,7 @@ public class ContextShim {
         private void updateWireSummarySerializationConfig() {
             Serializer currentSerializer = getCurrentWireSummarySerializer();
             kryo.register(HashMapContextSummary.class, currentSerializer);
+            kryo.register(LabeledContextSummary.class, currentSerializer);
             kryo.register(WireContextSummary.class, currentSerializer);
         }
     }

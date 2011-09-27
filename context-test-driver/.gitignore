@@ -1,1 +1,3 @@
-node.jar
+*.log
+*.jar
+

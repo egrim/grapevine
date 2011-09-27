@@ -2,7 +2,6 @@ package edu.utexas.ece.mpc.context;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Observable;
@@ -12,7 +11,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import edu.utexas.ece.mpc.context.logger.ContextLoggingDelegate;
 import edu.utexas.ece.mpc.context.logger.NullContextLogger;
 import edu.utexas.ece.mpc.context.summary.ContextSummary;
-import edu.utexas.ece.mpc.context.summary.HashMapContextSummary;
 import edu.utexas.ece.mpc.context.summary.WireContextSummary;
 
 public class ContextHandler {
@@ -22,9 +20,10 @@ public class ContextHandler {
 
     private static final int DEFAULT_TAU = 3;
 
-    private static ContextHandler me;
+    private static ContextHandler singleton;
 
-    private Map<Integer, HashMapContextSummary> localSummaries = new ConcurrentHashMap<Integer, HashMapContextSummary>();
+    private WireContextSummary myContext;
+    private Map<Integer, WireContextSummary> groupContext = new ConcurrentHashMap<Integer, WireContextSummary>();
     private Map<Integer, WireContextSummary> receivedSummaries = new ConcurrentHashMap<Integer, WireContextSummary>();
 
     private ContextLoggingDelegate loggingDelegate = new NullContextLogger();
@@ -46,29 +45,25 @@ public class ContextHandler {
     }
 
     public static synchronized ContextHandler getInstance() {
-        if (me == null) {
-            me = new ContextHandler();
+        if (singleton == null) {
+            singleton = new ContextHandler();
         }
 
-        return me;
+        return singleton;
     }
 
-    public void putLocalSummary(HashMapContextSummary summary) {
-        Integer id = summary.getId();
-        localSummaries.put(id, new HashMapContextSummary(summary));
-
-        logDbg("Added local summary: " + summary);
+    public void updateLocalSummary(ContextSummary summary) {
+        myContext = summary.getWireCopy();
+        logDbg("Updated local summary: " + myContext);
     }
 
-    public void removeLocalSummary(HashMapContextSummary summary) {
-        Integer id = summary.getId();
-        localSummaries.remove(id);
-        
-        logDbg("Removed local summary: " + summary);
+    public void removeLocalSummary() {
+        logDbg("Removing local summary: " + myContext);
+        myContext = null;
     }
 
-    public void putReceivedSummaries(Collection<WireContextSummary> summaries) {
-        Map<Integer, WireContextSummary> summariesToPut = new HashMap<Integer, WireContextSummary>();
+    public void handleIncomingSummaries(Collection<WireContextSummary> summaries) {
+        Collection<WireContextSummary> summariesToPut = new ArrayList<WireContextSummary>();
 
         logDbg("Adding/updating received summaries");
         for (WireContextSummary summary: summaries) {
@@ -78,26 +73,22 @@ public class ContextHandler {
             summary.incrementHops();
 
             // Is received summary local?
-            if (localSummaries.containsKey(id)) {
+            if (myContext.getId() == id) {
                 logDbg("Skipping summary (local): " + summary);
                 continue;
             }
 
-            // Is received summary not new or from a closer hop?
-            if (receivedSummaries.containsKey(id)
-                && summary.getTimestamp() <= receivedSummaries.get(id).getTimestamp()
-                && summary.getHops() >= receivedSummaries.get(id).getHops()) {
-                logDbg("Skipping summary (not new or with less hops): " + summary);
-                continue;
+            // Do we already have the best version of this summary?
+            if (receivedSummaries.containsKey(id)) {
+                WireContextSummary existing = receivedSummaries.get(id);
+                if ((summary.getTimestamp() < existing.getTimestamp())
+                    || (summary.getTimestamp() == existing.getTimestamp() && summary.getHops() >= existing.getHops())) {
+                    logDbg("Skipping summary (not new or with less hops): " + summary);
+                    continue;
+                }
             }
 
-            // Is received summary over the hop limit?
-            if (summary.getHops() > tau) {
-                logDbg("Skipping summary (over the hop limit)");
-                continue;
-            }
-
-            summariesToPut.put(id, summary);
+            summariesToPut.add(summary);
             logDbg("Marking  summary for add/update: " + summary);
         }
 
@@ -106,9 +97,9 @@ public class ContextHandler {
             preReceivedSummaryUpdateHook.notifyObservers(summariesToPut);
         }
         
-        receivedSummaries.putAll(summariesToPut);
-        for (ContextSummary sum: summariesToPut.values()) {
-            logDbg("Summary put in receivedSummaries: " + sum);
+        for (WireContextSummary summaryToPut: summariesToPut) {
+            receivedSummaries.put(summaryToPut.getId(), summaryToPut);
+            logDbg("Summary put in receivedSummaries: " + summaryToPut);
         }
 
         if (!summariesToPut.isEmpty()) {
@@ -118,14 +109,19 @@ public class ContextHandler {
     }
 
     public ContextSummary get(int id) {
-        ContextSummary summary;
-
-        summary = localSummaries.get(id);
-        if (summary != null) {
-            return summary;
+        if (id == myContext.getId()) {
+            return myContext.getCopy();
         }
 
-        return receivedSummaries.get(id);
+        if (groupContext.containsKey(id)) {
+            return groupContext.get(id).getCopy();
+        }
+
+        if (receivedSummaries.containsKey(id)) {
+            return receivedSummaries.get(id).getCopy();
+        }
+
+        return null;
     }
 
     public Integer get(int id, String key) {
@@ -137,12 +133,18 @@ public class ContextHandler {
         return summary.get(key);
     }
 
-    public ArrayList<ContextSummary> getSummariesToSend() {
-        ArrayList<ContextSummary> summaries = new ArrayList<ContextSummary>(
-                                                                            localSummaries.size()
-                                                                                    + receivedSummaries.size());
-        summaries.addAll(localSummaries.values());
-        summaries.addAll(receivedSummaries.values());
+    public ArrayList<WireContextSummary> getSummariesToSend() {
+        ArrayList<WireContextSummary> summaries = new ArrayList<WireContextSummary>();
+        summaries.add(myContext);
+        summaries.addAll(groupContext.values());
+
+        for (WireContextSummary summary: receivedSummaries.values()) {
+            if (summary.getHops() < tau) {
+                summaries.add(summary);
+            } else {
+                logDbg("Received summary not included due to tau: " + summary);
+            }
+        }
 
         logDbg("Prepared outgoing summaries:");
         for (ContextSummary summary: summaries) {
@@ -153,11 +155,17 @@ public class ContextHandler {
     }
 
     public List<ContextSummary> getReceivedSummaries() {
-        return new ArrayList<ContextSummary>(receivedSummaries.values());
+        List<ContextSummary> summaries = new ArrayList<ContextSummary>();
+        for (WireContextSummary summary: receivedSummaries.values()) {
+            summaries.add(summary.getCopy());
+        }
+
+        return summaries;
     }
 
     public void resetAllSummaryData() {
-        localSummaries.clear();
+        myContext = null;
+        groupContext.clear();
         receivedSummaries.clear();
         logDbg("All summary data reset");
     }
@@ -216,4 +224,13 @@ public class ContextHandler {
         wireSummaryType = type;
     }
 
+    public void addGroupSummary(ContextSummary groupSummary) {
+        groupContext.put(groupSummary.getId(), groupSummary.getWireCopy());
+    }
+
+    public void addGroupSummaries(Collection<ContextSummary> groupSummaries) {
+        for (ContextSummary summary: groupSummaries) {
+            addGroupSummary(summary);
+        }
+    }
 }

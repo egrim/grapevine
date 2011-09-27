@@ -13,21 +13,24 @@ import java.util.Comparator;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Random;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-public class ContextTestDriver implements Runnable {
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.OptionBuilder;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
+import org.apache.commons.cli.PosixParser;
 
-    private static final int DEFAULT_FILL_ITEMS = 100;
+import edu.utexas.ece.mpc.context.ContextHandler.WireSummaryType;
+
+public class ContextTestDriver {
+
     private static InetAddress BROADCAST_ADDRESS;
-
-    private int numNodes;
-    private float connectivityRadius;
-    private long seed;
-    private List<NodeInfo> nodes;
-
-    private Random rand;
-    private int runtime;
-    private boolean skipFirst;
-    private int fillItems;
+    private static Random rand = new Random();
 
     static {
         InetAddress broadcastAddress = null;
@@ -48,7 +51,7 @@ public class ContextTestDriver implements Runnable {
         broadcastAddress = null;
         while (interfaces.hasMoreElements()) {
             NetworkInterface iface = interfaces.nextElement();
-            for (InterfaceAddress address : iface.getInterfaceAddresses()) {
+            for (InterfaceAddress address: iface.getInterfaceAddresses()) {
                 broadcastAddress = address.getBroadcast();
                 if (broadcastAddress != null) {
                     break;
@@ -67,29 +70,195 @@ public class ContextTestDriver implements Runnable {
         BROADCAST_ADDRESS = broadcastAddress;
     }
 
-    public ContextTestDriver(int numNodes, float connectivityRadius, int runtime, int fillItems,
-                             long seed, boolean skipFirst) {
-        this.numNodes = numNodes;
-        this.connectivityRadius = connectivityRadius;
-        this.runtime = runtime;
-        this.fillItems = fillItems;
-        this.seed = seed;
-        this.skipFirst = skipFirst;
+    private static class NodeInfo {
 
-        rand = new Random(seed);
-    }
-
-    @Override
-    public void run() {
-        System.out.println("Simulating network of " + numNodes + " nodes with "
-                           + connectivityRadius + " connectivity radius (randomization seed: "
-                           + seed + ")");
-
-        nodes = new ArrayList<NodeInfo>(numNodes);
-        for (int i = 0; i < numNodes; i++) {
-            nodes.add(new NodeInfo());
+        public NodeInfo() {
+            x = rand.nextDouble();
+            y = rand.nextDouble();
         }
 
+        public NodeInfo(double x, double y) {
+            this.x = x;
+            this.y = y;
+        }
+
+        public String toString() {
+            return "Node " + id + " @ (" + x + ":" + y + ") with neighbors: "
+                   + Arrays.toString(neighbors);
+        }
+
+        public int id;
+        public double x;
+        public double y;
+        public int[] neighbors;
+        public Process process;
+        public Thread processIoHandlerThread;
+
+    }
+
+    public static class CLIOptions {
+        public static final String NUM_NODES = "nodes";
+        public static final String CONNECTIVITY_RADIUS = "connectivityRadius";
+        public static final String RUN_LENGTH = "runLength";
+        public static final String FILL_TO = "fillTo";
+        public static final String TAU = "tau";
+        public static final String SEND_INTERVAL = "sendInterval";
+        public static final String WIRE_TYPE = "wireType";
+        public static final String GROUP_TYPE = "groupType";
+        public static final String SKIP_FIRST = "skipFirst";
+        public static final String SEED = "seed";
+        public static final String HASH_SEED_HINT = "hashSeedHint";
+        public static final String GRID = "grid";
+
+        public static final int DEFAULT_FILL_TO = 100;
+        public static final int DEFAULT_TAU = 3;
+        public static final int DEFAULT_SEND_INTERVAL = 300;
+        public static final WireSummaryType DEFAULT_WIRE_TYPE = WireSummaryType.BLOOMIER;
+        public static final Node.GroupType DEFAULT_GROUP_TYPE = Node.GroupType.NONE;
+    }
+
+    @SuppressWarnings("static-access")
+    public static void main(String[] args) {
+        Option nodeOption = OptionBuilder.withDescription("number of nodes").withType(int.class)
+                                         .hasArg().withArgName("NUM").isRequired()
+                                         .withLongOpt(CLIOptions.NUM_NODES).create();
+        Option radiusOption = OptionBuilder.withDescription("radius of connectivity")
+                                           .withType(int.class).hasArg().withArgName("RADIUS")
+                                           .isRequired()
+                                           .withLongOpt(CLIOptions.CONNECTIVITY_RADIUS).create();
+        Option runtimeOption = OptionBuilder.withDescription("length to run (in ms)")
+                                            .withType(int.class).hasArg().withArgName("TIME_MS")
+                                            .isRequired().withLongOpt(CLIOptions.RUN_LENGTH)
+                                            .create();
+        Option fillToOption = OptionBuilder.withDescription("number of context items to include (0=no context)")
+                                           .withType(int.class).hasArg().withArgName("FILLTO")
+                                           .withLongOpt(CLIOptions.FILL_TO).create();
+        Option tauOption = OptionBuilder.withDescription("upper limit on hopcount for forwarding context summaries")
+                                        .withType(int.class).hasArg().withArgName("TAU")
+                                        .withLongOpt(CLIOptions.TAU).create();
+        Option sendIntervalOption = OptionBuilder.withDescription("internal (in ms) to send outgoing packets")
+                                                 .withType(int.class).hasArg()
+                                                 .withArgName("INTERVAL")
+                                                 .withLongOpt(CLIOptions.SEND_INTERVAL).create();
+        Option wireTypeOption = OptionBuilder.withDescription("context summary encoding")
+                                             .withType(WireSummaryType.class).hasArg()
+                                             .withArgName("WIRETYPE")
+                                             .withLongOpt(CLIOptions.WIRE_TYPE).create();
+        Option groupTypeOption = OptionBuilder.withDescription("group type")
+                                              .withType(Node.GroupType.class).hasArg()
+                                              .withArgName("GROUPTYPE")
+                                              .withLongOpt(CLIOptions.GROUP_TYPE).create();
+        Option skipFirstOption = OptionBuilder.withDescription("skip first node (useful for debugging)")
+                                              .withType(boolean.class)
+                                              .withLongOpt(CLIOptions.SKIP_FIRST).create();
+        Option gridOption = OptionBuilder.withDescription("arrange in equidistant grid formation")
+                                         .withType(boolean.class).withLongOpt(CLIOptions.GRID)
+                                         .create();
+        Option seedOption = OptionBuilder.withDescription("seed for randomization")
+                                         .withType(long.class).hasArg().withArgName("SEED")
+                                         .withLongOpt(CLIOptions.SEED).create();
+
+
+        Options options = new Options();
+        options.addOption(nodeOption);
+        options.addOption(runtimeOption);
+        options.addOption(radiusOption);
+        options.addOption(fillToOption);
+        options.addOption(tauOption);
+        options.addOption(sendIntervalOption);
+        options.addOption(wireTypeOption);
+        options.addOption(groupTypeOption);
+        options.addOption(skipFirstOption);
+        options.addOption(seedOption);
+        options.addOption(gridOption);
+
+        int numNodes = 0;
+        float connectivityRadius = 0;
+        int runtime = 0;
+        int fillTo = CLIOptions.DEFAULT_FILL_TO;
+        int tau = CLIOptions.DEFAULT_TAU;
+        int sendInterval = CLIOptions.DEFAULT_SEND_INTERVAL;
+        WireSummaryType wireType = CLIOptions.DEFAULT_WIRE_TYPE;
+        Node.GroupType groupType = CLIOptions.DEFAULT_GROUP_TYPE;
+        boolean skipFirst = false;
+        boolean grid = false;
+        Long seed = null;
+
+        try {
+            CommandLineParser parser = new PosixParser();
+            CommandLine cli = parser.parse(options, args);
+
+            numNodes = Integer.valueOf(cli.getOptionValue(CLIOptions.NUM_NODES));
+            connectivityRadius = Float.valueOf(cli.getOptionValue(CLIOptions.CONNECTIVITY_RADIUS));
+            runtime = Integer.valueOf(cli.getOptionValue(CLIOptions.RUN_LENGTH));
+
+            if (cli.hasOption(CLIOptions.FILL_TO)) {
+                fillTo = Integer.valueOf(cli.getOptionValue(CLIOptions.FILL_TO));
+            }
+
+            if (cli.hasOption(CLIOptions.TAU)) {
+                tau = Integer.valueOf(cli.getOptionValue(CLIOptions.TAU));
+            }
+
+            if (cli.hasOption(CLIOptions.SEND_INTERVAL)) {
+                sendInterval = Integer.valueOf(cli.getOptionValue(CLIOptions.SEND_INTERVAL));
+            }
+
+            if (cli.hasOption(CLIOptions.WIRE_TYPE)) {
+                wireType = WireSummaryType.valueOf(cli.getOptionValue(CLIOptions.WIRE_TYPE));
+            }
+
+            if (cli.hasOption(CLIOptions.GROUP_TYPE)) {
+                groupType = Node.GroupType.valueOf(cli.getOptionValue(CLIOptions.GROUP_TYPE));
+            }
+
+            if (cli.hasOption(CLIOptions.SKIP_FIRST)) {
+                skipFirst = true;
+            }
+
+            if (cli.hasOption(CLIOptions.GRID)) {
+                grid = true;
+            } else {
+                grid = false;
+            }
+
+            if (cli.hasOption(CLIOptions.SEED)) {
+                seed = Long.valueOf(cli.getOptionValue(CLIOptions.SEED));
+            } else {
+                seed = rand.nextLong();
+            }
+
+        } catch (ParseException e) {
+            System.err.println("Could not parse options: " + e);
+            HelpFormatter formatter = new HelpFormatter();
+            formatter.printHelp("Node", options, true);
+            System.exit(-1);
+        }
+
+        rand = new Random(seed);
+
+        System.out.printf("Simulating network with numNodes=%d connectivityRadius=%f fillTo=%d tau=%d sendInterval=%d wireType=%s groupType=%s skipFirst=%b seed=%d grid=%b\n",
+                          numNodes, connectivityRadius, fillTo, tau, sendInterval,
+                          wireType.toString(), groupType.toString(), skipFirst, seed, grid);
+
+        List<NodeInfo> nodes = new ArrayList<NodeInfo>(numNodes);
+        if (grid) {
+            double sqrt = Math.sqrt(numNodes);
+            int numRows = (int) Math.floor(sqrt);
+            if (numRows != sqrt) {
+                throw new IllegalArgumentException("Num nodes must be sqrt-able in grid formation");
+            }
+
+            for (int i = 0; i < numRows; i++) {
+                for (int j = 0; j < numRows; j++) {
+                    nodes.add(new NodeInfo(((double) i) / numRows, 1.0 * j / numRows));
+                }
+            }
+        } else {
+            for (int i = 0; i < numNodes; i++) {
+                nodes.add(new NodeInfo());
+            }
+        }
         Collections.sort(nodes, new Comparator<NodeInfo>() {
 
             @Override
@@ -126,28 +295,53 @@ public class ContextTestDriver implements Runnable {
         }
 
         System.out.println("Generated the following nodes");
-        for (NodeInfo node : nodes) {
+        for (NodeInfo node: nodes) {
             System.out.println(node);
         }
         System.out.println();
 
+        Long hashSeedHint = null;
+        if (nodes.size() > 0 && wireType == WireSummaryType.BLOOMIER) {
+            System.out.println("Precalculating hash seed hint");
+
+            final NodeInfo node = nodes.get(0);
+
+            List<String> command = generateCommandList(node.id, node.x, node.y, fillTo, tau,
+                                                       sendInterval, wireType, groupType,
+                                                       node.neighbors, hashSeedHint);
+
+            try {
+                Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
+
+                InputStream in = process.getInputStream();
+                InputStreamReader isr = new InputStreamReader(in);
+                BufferedReader br = new BufferedReader(isr);
+                String line;
+                while ((line = br.readLine()) != null) {
+                    Pattern pattern = Pattern.compile(".*hashSeed=(\\d+) .*");
+                    Matcher matcher = pattern.matcher(line);
+                    if (matcher.matches()) {
+                        hashSeedHint = Long.valueOf(matcher.group(1));
+                        System.out.println("Hashseed hint retrieved: " + hashSeedHint);
+                        break;
+                    }
+                }
+                process.destroy();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+        }
+
+        
         System.out.println("Starting beacon for each node");
         try {
             try {
                 for (final NodeInfo node: nodes) {
-                    List<String> command = new ArrayList<String>();
-                    command.add("java");
-                    command.add("-jar");
-                    command.add("node.jar");
-                    command.add(Integer.valueOf(node.id).toString());
-                    command.add(Double.valueOf(node.x).toString());
-                    command.add(Double.valueOf(node.y).toString());
-                    command.add(Integer.valueOf(fillItems).toString());
-                    command.add(BROADCAST_ADDRESS.toString().substring(1));
-
-                    for (int neighbor: node.neighbors) {
-                        command.add(Integer.valueOf(neighbor).toString());
-                    }
+                    List<String> command = generateCommandList(node.id, node.x, node.y, fillTo,
+                                                               tau, sendInterval, wireType,
+                                                               groupType, node.neighbors,
+                                                               hashSeedHint);
 
                     // Handle skipFirst
                     if (skipFirst && node.id == 0) {
@@ -155,7 +349,7 @@ public class ContextTestDriver implements Runnable {
                         continue;
                     }
 
-                    System.out.println("Starting process - command=" + command.toString());
+                    System.out.println("Starting process - command = " + command.toString());
 
                     final Process process = new ProcessBuilder(command).redirectErrorStream(true)
                                                                        .start();
@@ -196,86 +390,50 @@ public class ContextTestDriver implements Runnable {
                 }
             }
         }
-    }
-
-    private class NodeInfo {
-
-        public NodeInfo() {
-            x = rand.nextDouble();
-            y = rand.nextDouble();
-        }
-
-        public String toString() {
-            return "Node " + id + " @ (" + x + ":" + y + ") with neighbors: "
-                   + Arrays.toString(neighbors);
-        }
-
-        public int id;
-        public double x;
-        public double y;
-        public int[] neighbors;
-        public Process process;
-        public Thread processIoHandlerThread;
 
     }
 
-    public static void main(String[] args) {
-
-        int numNodes = 0;
-        try {
-            numNodes = Integer.valueOf(args[0]);
-        } catch (Exception e) {
-            System.err.println("Must specify the number of nodes to simulate");
-            System.exit(-1);
+    private static List<String> generateCommandList(int id, double x, double y, int fillTo,
+                                                    int tau, int sendInterval,
+                                                    WireSummaryType wireType,
+                                                    Node.GroupType groupType, int[] neighbors,
+                                                    Long hashSeedHint) {
+        List<String> command = new ArrayList<String>();
+        command.add("java");
+        command.add("-jar");
+        command.add("node.jar");
+        command.add("--id");
+        command.add(Integer.valueOf(id).toString());
+        command.add("-x");
+        command.add(Double.valueOf(x).toString());
+        command.add("-y");
+        command.add(Double.valueOf(y).toString());
+        command.add("--fillTo");
+        command.add(Integer.valueOf(fillTo).toString());
+        command.add("--tau");
+        command.add(Integer.valueOf(tau).toString());
+        command.add("--sendInterval");
+        command.add(Integer.valueOf(sendInterval).toString());
+        command.add("--wireType");
+        command.add(wireType.toString());
+        command.add("--groupType");
+        command.add(groupType.toString());
+        command.add("--address");
+        // command.add(BROADCAST_ADDRESS.toString().substring(1));
+        command.add("localhost");
+   
+        if (neighbors.length > 0) {
+            command.add("--connectedNodes");
+            for (int neighbor: neighbors) {
+                command.add(Integer.valueOf(neighbor).toString());
+            }
         }
 
-        float connectivityRadius = 0;
-        try {
-            connectivityRadius = Float.valueOf(args[1]);
-        } catch (Exception e) {
-            System.err.println("Must specify conectivity radius for nodes");
-            System.exit(-1);
+        if (hashSeedHint != null) {
+            command.add("--hashSeedHint");
+            command.add(hashSeedHint.toString());
         }
 
-        int runtime = 0;
-        try {
-            runtime = Integer.valueOf(args[2]);
-        } catch (Exception e) {
-            System.err.println("Must specify length of simulation (in milliseconds)");
-            System.exit(-1);
-        }
-
-        int fillItems = DEFAULT_FILL_ITEMS;
-        try {
-            fillItems = Integer.valueOf(args[3]);
-        } catch (Exception e) {
-            // Ignore
-        }
-
-        long seed = 0;
-        try {
-            seed = Long.valueOf(args[4]);
-        } catch (ArrayIndexOutOfBoundsException e) {
-            seed = new Random().nextLong();
-        } catch (Exception e) {
-            System.err.println("Could not interpret provided seed");
-            System.exit(-1);
-        }
-
-        boolean skipFirst = false;
-        try {
-            skipFirst = Boolean.valueOf(args[5]);
-        } catch (ArrayIndexOutOfBoundsException e) {
-            // Ignore (just use default value)
-        } catch (Exception e) {
-            System.err.println("Could not interpret skipFirst argument: " + e);
-            System.exit(-1);
-        }
-
-        ContextTestDriver simulation = new ContextTestDriver(numNodes, connectivityRadius, runtime,
-                                                             fillItems,
-                                                             seed, skipFirst);
-        simulation.run();
+        return command;
     }
-
 }

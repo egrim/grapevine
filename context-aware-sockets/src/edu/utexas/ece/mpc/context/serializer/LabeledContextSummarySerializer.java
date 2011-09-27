@@ -7,7 +7,7 @@ import com.esotericsoftware.kryo.Serializer;
 
 import edu.utexas.ece.mpc.context.ContextHandler;
 import edu.utexas.ece.mpc.context.summary.HashMapContextSummary;
-import edu.utexas.ece.mpc.context.summary.HashMapWireContextSummary;
+import edu.utexas.ece.mpc.context.summary.LabeledContextSummary;
 
 public class LabeledContextSummarySerializer extends Serializer {
 
@@ -15,29 +15,22 @@ public class LabeledContextSummarySerializer extends Serializer {
     private ContextHandler contextHandler = ContextHandler.getInstance();
 
     public LabeledContextSummarySerializer(Kryo kryo) {
-        kryo.register(HashMapWireContextSummary.class, this);
-
         this.kryo = kryo;
     }
 
     @Override
     public void writeObjectData(ByteBuffer buffer, Object object) {
-        HashMapWireContextSummary wSummary;
-        if (object instanceof HashMapContextSummary) {
-            HashMapContextSummary summary = (HashMapContextSummary) object;
-            wSummary = new HashMapWireContextSummary(summary);
-        } else {
-            wSummary = (HashMapWireContextSummary) object;
-        }
+        // TODO: detect wire type changes that will cause the following cast to fail
+        LabeledContextSummary summary = (LabeledContextSummary) object;
 
-        kryo.writeObjectData(buffer, wSummary.getId());
-        kryo.writeObjectData(buffer, wSummary.getHops());
-        kryo.writeObjectData(buffer, wSummary.getTimestamp());
+        kryo.writeObjectData(buffer, summary.getId());
+        kryo.writeObjectData(buffer, summary.getHops());
+        kryo.writeObjectData(buffer, summary.getTimestamp());
 
-        kryo.writeObjectData(buffer, wSummary.size());
-        for (String key: wSummary.keySet()) {
+        kryo.writeObjectData(buffer, summary.size());
+        for (String key: summary.keySet()) {
             kryo.writeObjectData(buffer, key);
-            kryo.writeObjectData(buffer, wSummary.get(key));
+            kryo.writeObjectData(buffer, summary.get(key));
         }
     
     }
@@ -60,7 +53,7 @@ public class LabeledContextSummarySerializer extends Serializer {
             summary.put(key, value);
         }
 
-        HashMapWireContextSummary wSummary = new HashMapWireContextSummary(summary, hops, timestamp);
+        LabeledContextSummary wSummary = new LabeledContextSummary(summary, hops, timestamp);
 
         int summarySize = buffer.position() - bufferStart;
         contextHandler.logDbg(String.format("Decoded context summary (size=%d): %s", summarySize,

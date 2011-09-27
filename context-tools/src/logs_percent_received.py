@@ -14,16 +14,42 @@ HOST = {'10.11.12.11': 'lonestar',
         '10.11.12.16': 'adams',
         '10.11.12.34': 'negramodelo',
         '10.11.12.25': 'wynkoop',
-        '10.11.12.13': 'manny'}
+        '10.11.12.13': 'manny',
+        '10.11.12.20': 'guiness'}
 
-NUM_CONTEXT = {12: 100,
-               13: 0,
-               14: 200,
-               15: 400,
-               16: 800,
-               17: 1600,
-               18: 3200,}
+# Mission 33
+#NUM_CONTEXT = {12: 100,
+#               13: 0,
+#               14: 200,
+#               15: 400,
+#               16: 800,
+#               17: 1600,
+#               18: 3200,}
 
+# Mission 34
+NUM_CONTEXT = {1:0,
+               2:10,
+               3:20,
+               4:30,
+               5:40,
+               6:50,
+               7:60,
+               8:80,
+               9:70,
+               10:90,
+               11:100,
+               12:0,
+               13:10,
+               14:20,
+               15:20,
+               16:30,
+               17:40,
+               18:40,
+               19:50,
+               20:60,
+               21:70,
+               22:70,
+               23:80,}
 
 def main():
     experiments = {}
@@ -33,11 +59,15 @@ def main():
         print "Processing %s's directory" % host
         
         for experimentFilename in sorted(os.listdir(host)):
-            expNum = int(RE_EXPNUM.search(experimentFilename).group(1))
-            
-            if not 12 <= expNum <= 18:
+            match = RE_EXPNUM.search(experimentFilename)
+            if not match:
                 continue
             
+            expNum = int(match.group(1))
+            
+#            if not 12 <= expNum <= 18:
+#                continue
+#            
             print "Processing file: %s (Experiment %i)" % (experimentFilename, expNum)
             
             with open(os.path.join(results_dir, host, experimentFilename)) as expFile:
@@ -59,7 +89,7 @@ def main():
                 experiments[expNum] = experimentEntry
                 
                 
-    experimentalResults = {}
+    experimentalResults = []
     for expNum in sorted(experiments.keys()):
         experimentEntry = experiments[expNum]
         
@@ -108,12 +138,11 @@ def main():
         averageOfAverages = sum(averages)/len(averages)
         print "%.2f%% of all the packets were received" % (averageOfAverages)
              
-        experimentalResults[NUM_CONTEXT[expNum]] = averageOfAverages
+        experimentalResults.append((expNum, NUM_CONTEXT[expNum], averageOfAverages))
         
         print "*"*10
         
-    for result in sorted(experimentalResults.keys()):
-        print "%d: %.2f" % (result, experimentalResults[result])
+    pprint.pprint(experimentalResults)
                 
                 
                 

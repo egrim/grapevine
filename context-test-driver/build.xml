@@ -11,7 +11,17 @@
             <fileset dir="bin"/>
             <fileset dir="../context-aware-sockets/bin"/>
             <fileset dir="../../java-bloomier-filter/bin"/>
+            <zipfileset excludes="META-INF/*.SF" src="./lib/commons-cli-1.2.jar"/>
             <zipfileset excludes="META-INF/*.SF" src="../java-bloomier-filter/lib/kryo-1.04-all.jar"/>
+        </jar>
+        <jar destfile="driver.jar" filesetmanifest="mergewithoutmain">
+            <manifest>
+                <attribute name="Main-Class" value="ContextTestDriver"/>
+                <attribute name="Class-Path" value="."/>
+            </manifest>
+            <fileset dir="bin"/>
+            <fileset dir="../context-aware-sockets/bin"/>
+            <zipfileset excludes="META-INF/*.SF" src="./lib/commons-cli-1.2.jar"/>
         </jar>
     </target>
 </project>

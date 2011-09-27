@@ -1,14 +1,12 @@
 package edu.utexas.ece.mpc.context.serializer;
 
 import java.nio.ByteBuffer;
-import java.util.concurrent.TimeoutException;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.Serializer;
 
 import edu.utexas.ece.mpc.context.ContextHandler;
 import edu.utexas.ece.mpc.context.summary.BloomierContextSummary;
-import edu.utexas.ece.mpc.context.summary.HashMapContextSummary;
 
 public class BloomierContextSummarySerializer extends Serializer {
     private final Kryo kryo;
@@ -16,24 +14,13 @@ public class BloomierContextSummarySerializer extends Serializer {
 
     public BloomierContextSummarySerializer(Kryo kryo) {
         kryo.register(BloomierContextSummary.class, this);
-
         this.kryo = kryo;
     }
 
     @Override
     public void writeObjectData(ByteBuffer buffer, Object object) {
-        BloomierContextSummary summary;
-        if (object instanceof HashMapContextSummary) {
-            HashMapContextSummary hSummary = (HashMapContextSummary) object;
-            try {
-                summary = new BloomierContextSummary(hSummary, hSummary.getHashSeedHint());
-            } catch (TimeoutException e) {
-                throw new RuntimeException("Could not create bloomier context summary", e);
-            }
-            hSummary.setHashSeedHint(summary.getHashSeed());
-        } else {
-            summary = (BloomierContextSummary) object;
-        }
+        // TODO: detect wire type changes that will cause the following cast to fail
+        BloomierContextSummary summary = (BloomierContextSummary) object;
 
         int k = summary.getK();
         int q = summary.getQ();

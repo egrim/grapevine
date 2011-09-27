@@ -7,8 +7,12 @@ import java.nio.ByteBuffer;
 public class DatagramContextShim extends ContextShim {
 
     public DatagramPacket getSendPacket(DatagramPacket p) throws SocketException {
-        int payloadLength = p.getLength();
         byte[] contextBytes = getContextBytes();
+        contextHandler.logDbg("Packet prepared for send has context with size="
+                              + contextBytes.length);
+
+        int payloadLength = p.getLength();
+
         byte[] bytesToSend = new byte[PAYLOAD_LENGTH_FIELD_SIZE + payloadLength
                                       + contextBytes.length];
 
@@ -47,16 +51,19 @@ public class DatagramContextShim extends ContextShim {
         p.setLength(payloadLength);
 
         try {
+            int start = receivedBytesBuffer.position();
             processContextBytes(receivedBytesBuffer);
+            contextHandler.logDbg("Received packet had context information with size="
+                                  + (receivedBytesBuffer.position() - start));
         } catch (Exception e) { // FIXME: catch (or modify context shim to throw) appropriate exception
-            e.printStackTrace();
+            contextHandler.logDbg("Receive buffer size exceeded (context information discarded), growing buffer");
             increaseReceiveBufferSize();
         }
     }
 
     private void increaseReceiveBufferSize() {
         receiveBuffer = new byte[receiveBuffer.length * 2];
-        System.out.println("Receive buffer size incrase to " + receiveBuffer.length);
+        contextHandler.logDbg("Receive buffer size increased to " + receiveBuffer.length);
     }
 
     private static final int PAYLOAD_LENGTH_FIELD_SIZE = Integer.SIZE / Byte.SIZE;

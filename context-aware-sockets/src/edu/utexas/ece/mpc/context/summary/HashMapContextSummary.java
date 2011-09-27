@@ -6,8 +6,13 @@ import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.UUID;
 
+import edu.utexas.ece.mpc.context.ContextHandler;
+
 @SuppressWarnings("serial")
 public class HashMapContextSummary extends HashMap<String, Integer> implements ContextSummary {
+
+    protected final int id;
+    protected long hashSeedHint = 0;
 
     public HashMapContextSummary() {
         Enumeration<NetworkInterface> interfaces;
@@ -56,8 +61,14 @@ public class HashMapContextSummary extends HashMap<String, Integer> implements C
         this.hashSeedHint = summary.hashSeedHint;
     }
 
+    public HashMapContextSummary(int id, long hashSeedHint) {
+        this.id = id;
+        this.hashSeedHint = hashSeedHint;
+    }
+
     @Override
     public Integer get(String key) {
+        // Needed to satisfy interface requirement (even though the parent class already has it)
         return super.get(key);
     }
 
@@ -76,9 +87,28 @@ public class HashMapContextSummary extends HashMap<String, Integer> implements C
 
     @Override
     public String toString() {
-        return String.format("HashMapContextSummary with id=%d", id);
+        return String.format("HashMapContextSummary with id=%d size=%d", id, size());
     }
 
-    private int id;
-    private long hashSeedHint = 0;
+    @Override
+    public ContextSummary getCopy() {
+        return new HashMapContextSummary(this);
+    }
+
+    @Override
+    public WireContextSummary getWireCopy() {
+        WireContextSummary summary = null;
+        ContextHandler handler = ContextHandler.getInstance();
+        switch (handler.getWireSummaryType()) {
+            case BLOOMIER:
+                BloomierContextSummary bSummary = new BloomierContextSummary(this, hashSeedHint);
+                hashSeedHint = bSummary.getHashSeed();
+                summary = bSummary;
+                break;
+            case LABELED:
+                summary = new LabeledContextSummary(this);
+                break;
+        }
+        return summary;
+    }
 }
