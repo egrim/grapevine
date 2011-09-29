@@ -34,6 +34,7 @@ public class ContextHandler {
     private int tau;
     
     private WireSummaryType wireSummaryType = WireSummaryType.BLOOMIER;
+//    private WireSummaryType wireSummaryType = WireSummaryType.LABELED;
 
     // Note: Hide constructor (singleton pattern)
     private ContextHandler() {
@@ -52,17 +53,17 @@ public class ContextHandler {
         return singleton;
     }
 
-    public void updateLocalSummary(ContextSummary summary) {
+    public synchronized void updateLocalSummary(ContextSummary summary) {
         myContext = summary.getWireCopy();
         logDbg("Updated local summary: " + myContext);
     }
 
-    public void removeLocalSummary() {
+    public synchronized void removeLocalSummary() {
         logDbg("Removing local summary: " + myContext);
         myContext = null;
     }
 
-    public void handleIncomingSummaries(Collection<WireContextSummary> summaries) {
+    public synchronized void handleIncomingSummaries(Collection<WireContextSummary> summaries) {
         Collection<WireContextSummary> summariesToPut = new ArrayList<WireContextSummary>();
 
         logDbg("Adding/updating received summaries");
@@ -108,7 +109,7 @@ public class ContextHandler {
         }
     }
 
-    public ContextSummary get(int id) {
+    public synchronized ContextSummary get(int id) {
         if (id == myContext.getId()) {
             return myContext.getCopy();
         }
@@ -133,9 +134,13 @@ public class ContextHandler {
         return summary.get(key);
     }
 
-    public ArrayList<WireContextSummary> getSummariesToSend() {
+    public synchronized ArrayList<WireContextSummary> getSummariesToSend() {
         ArrayList<WireContextSummary> summaries = new ArrayList<WireContextSummary>();
-        summaries.add(myContext);
+        
+        if (myContext != null) {
+            summaries.add(myContext);
+        }
+        
         summaries.addAll(groupContext.values());
 
         for (WireContextSummary summary: receivedSummaries.values()) {
@@ -154,7 +159,7 @@ public class ContextHandler {
         return summaries;
     }
 
-    public List<ContextSummary> getReceivedSummaries() {
+    public synchronized List<ContextSummary> getReceivedSummaries() {
         List<ContextSummary> summaries = new ArrayList<ContextSummary>();
         for (WireContextSummary summary: receivedSummaries.values()) {
             summaries.add(summary.getCopy());
@@ -163,18 +168,18 @@ public class ContextHandler {
         return summaries;
     }
 
-    public void resetAllSummaryData() {
+    public synchronized void resetAllSummaryData() {
         myContext = null;
         groupContext.clear();
         receivedSummaries.clear();
         logDbg("All summary data reset");
     }
 
-    public void setLoggerDelegate(ContextLoggingDelegate delegate) {
+    public synchronized void setLoggerDelegate(ContextLoggingDelegate delegate) {
         loggingDelegate = delegate;
     }
 
-    public void setTau(int newTau) {
+    public synchronized void setTau(int newTau) {
         tau = newTau;
 
         for (WireContextSummary summary: receivedSummaries.values()) {
@@ -184,19 +189,19 @@ public class ContextHandler {
         }
     }
     
-    public void log(String msg) {
+    public synchronized void log(String msg) {
         loggingDelegate.log(msg);
     }
 
-    public void logError(String msg) {
+    public synchronized void logError(String msg) {
         loggingDelegate.logError(msg);
     }
 
-    public void logDbg(String msg) {
+    public synchronized void logDbg(String msg) {
         loggingDelegate.logDebug(msg);
     }
 
-    public boolean isDebugEnabled() {
+    public synchronized boolean isDebugEnabled() {
         return loggingDelegate.isDebugEnabled();
     }
 
@@ -216,15 +221,17 @@ public class ContextHandler {
         }
     }
 
-    public WireSummaryType getWireSummaryType() {
+    public synchronized WireSummaryType getWireSummaryType() {
         return wireSummaryType;
     }
 
-    public void setWireSummaryType(WireSummaryType type) {
+    public synchronized void setWireSummaryType(WireSummaryType type) {
         wireSummaryType = type;
+        resetAllSummaryData();
+        logDbg("Wire summary changed to " + wireSummaryType + " and stored context was cleared");
     }
 
-    public void addGroupSummary(ContextSummary groupSummary) {
+    public synchronized void addGroupSummary(ContextSummary groupSummary) {
         groupContext.put(groupSummary.getId(), groupSummary.getWireCopy());
     }
 

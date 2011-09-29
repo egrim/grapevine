@@ -19,8 +19,15 @@ public class BloomierContextSummarySerializer extends Serializer {
 
     @Override
     public void writeObjectData(ByteBuffer buffer, Object object) {
-        // TODO: detect wire type changes that will cause the following cast to fail
-        BloomierContextSummary summary = (BloomierContextSummary) object;
+        BloomierContextSummary summary;
+        try {
+            // TODO: detect wire type changes that will cause the following cast to fail
+            summary = (BloomierContextSummary) object;
+        }
+        catch (ClassCastException e) {
+            contextHandler.logError("Ignoring request to write incompatible context summary: " + object);
+            return;
+        }
 
         int k = summary.getK();
         int q = summary.getQ();
