@@ -5,6 +5,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import edu.utexas.ece.mpc.context.summary.ContextSummary;
+import edu.utexas.ece.mpc.context.summary.HashMapContextSummary;
 import edu.utexas.ece.mpc.context.summary.LabeledContextSummary;
 import edu.utexas.ece.mpc.context.summary.WireContextSummary;
 
@@ -22,6 +23,18 @@ public class GroupUtils {
         return groupMemberships.contains(gIdToCheck);
     }
 
+    public static void addDeclaredGroupMembership(HashMapContextSummary summary, int gId) {
+        Set<Integer> declaredMemberships = getDeclaredMemberships(summary);
+        declaredMemberships.add(gId);
+        
+        int groupsEnumerated = 0;
+        for (Integer declaredMembership: declaredMemberships) {
+            summary.put(GROUP_DECLARATION_PREFIX + groupsEnumerated, declaredMembership);
+            groupsEnumerated++;
+        }
+        summary.put(GROUP_DECLARATIONS_ENUMERATED, groupsEnumerated);
+    }
+
     public static Set<Integer> getDeclaredMemberships(ContextSummary summary) {
         Set<Integer> ids = new HashSet<Integer>();
         Integer groupsEnumerated = summary.get(GROUP_DECLARATIONS_ENUMERATED);
@@ -34,7 +47,7 @@ public class GroupUtils {
         return ids;
     }
 
-    public static void addGroupMember(LabeledContextSummary groupSummary, int id) {
+    public static void addGroupMember(HashMapContextSummary groupSummary, int id) {
         Integer membersEnumerated;
         if (groupSummary.containsKey(MEMBERS_ENUMERATED)) {
             membersEnumerated = groupSummary.get(MEMBERS_ENUMERATED);
@@ -56,6 +69,23 @@ public class GroupUtils {
         }
 
         return ids;
+    }
+
+    public static void setGroupMembers(HashMapContextSummary groupSummary, Set<Integer> memberIds) {
+        Integer previousNumberOfMembers = groupSummary.get(MEMBERS_ENUMERATED);
+        int newNumberOfMembers = memberIds.size();
+
+        groupSummary.put(MEMBERS_ENUMERATED, 0);
+        for (Integer memberId: memberIds) {
+            addGroupMember(groupSummary, memberId);
+        }
+
+        if (previousNumberOfMembers != null) {
+            for (int i = newNumberOfMembers; i < previousNumberOfMembers; i++) {
+                groupSummary.remove(MEMBER_PREFIX + i);
+
+            }
+        }
     }
 
     public static boolean isAggregated(ContextSummary summary, int idToCheck) {

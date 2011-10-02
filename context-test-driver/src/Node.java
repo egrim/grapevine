@@ -19,9 +19,11 @@ import org.apache.commons.cli.PosixParser;
 
 import edu.utexas.ece.mpc.context.ContextHandler;
 import edu.utexas.ece.mpc.context.ContextHandler.WireSummaryType;
+import edu.utexas.ece.mpc.context.group.LabeledGroupDefinition;
 import edu.utexas.ece.mpc.context.logger.SysoutLoggingDelegate;
 import edu.utexas.ece.mpc.context.net.ContextShimmedDatagramSocket;
 import edu.utexas.ece.mpc.context.summary.ContextSummary;
+import edu.utexas.ece.mpc.context.summary.GroupContextSummary;
 import edu.utexas.ece.mpc.context.summary.HashMapContextSummary;
 import edu.utexas.ece.mpc.context.util.GroupUtils;
 
@@ -37,67 +39,21 @@ public class Node {
     private static ContextHandler handler = ContextHandler.getInstance();
 
     public static void setupLabeledGroups() {
-        // // Create some labeled groups based upon the divisibility of the id
-        // int groupLabelNumber = 0;
-        // Collection<WireContextSummary> groupSummaries = new ArrayList<WireContextSummary>();
-        // for (int i = 1; i <= 3; i++) {
-        // if (id % i == 0) {
-        // int gId = GroupUtils.GROUP_ID_OFFSET + i;
-        // summary.put(GroupUtils.GROUP_DECLARATION_PREFIX + groupLabelNumber, gId);
-        // groupLabelNumber++;
-        // LabeledContextSummary groupSummary = GroupUtils.createGroupAgg(gId);
-        // GroupUtils.addGroupMember(groupSummary, id);
-        // groupSummaries.add(groupSummary);
-        // }
-        // }
-        // summary.put(GroupUtils.GROUP_DECLARATIONS_ENUMERATED, groupLabelNumber);
-        //
-        // handler.seedGroupSummaries(groupSummaries);
-        // handler.addPreReceivedSummariesUpdateObserver(new Observer() {
-        // @Override
-        // public void update(Observable o, Object object) {
-        // @SuppressWarnings("unchecked")
-        // Collection<WireContextSummary> summariesToUpdate = (Collection<WireContextSummary>) object;
-        // List<WireContextSummary> summariesReplaced = new ArrayList<WireContextSummary>();
-        // List<WireContextSummary> replacementSummaries = new ArrayList<WireContextSummary>();
-        // for (WireContextSummary summaryToUpdate: summariesToUpdate) {
-        // Set<Integer> members = GroupUtils.getGroupMembers(summaryToUpdate);
-        // if (!members.isEmpty()) {
-        // int gId = summaryToUpdate.getId();
-        //
-        // LabeledContextSummary groupSummary;
-        // try {
-        // ContextSummary summary = handler.get(gId);
-        // if (summary == null) {
-        // throw new Exception();
-        // }
-        // groupSummary = (LabeledContextSummary) summary;
-        // } catch (Exception e) {
-        // groupSummary = new LabeledContextSummary(gId);
-        // }
-        //
-        // for (Integer member: members) {
-        // GroupUtils.addGroupMember(groupSummary, member);
-        // }
-        //
-        // summariesReplaced.add(summaryToUpdate);
-        // replacementSummaries.add(groupSummary);
-        // }
-        // }
-        //
-        // summariesToUpdate.removeAll(summariesReplaced);
-        // summariesToUpdate.addAll(replacementSummaries);
-        // }
-        // });
+        // Create some labeled groups based upon the divisibility of the id
+        for (int i = 3; i <= 3; i++) {
+            final int gId = GroupUtils.GROUP_ID_OFFSET + i;
+            handler.addGroupDefinition(new LabeledGroupDefinition(gId));
+            if (id % i == 0) {
+                handler.logDbg("Adding declared group membership for group " + gId);
+                GroupUtils.addDeclaredGroupMembership(summary, gId);
+            }
+        }
     }
 
     private static void reportGroups() {
-        for (ContextSummary summary: handler.getReceivedSummaries()) {
-            int id = summary.getId();
-            if (id >= GroupUtils.GROUP_ID_OFFSET) {
-                handler.logDbg("  Group " + id + " membership: "
-                        + GroupUtils.getGroupMembers(summary));
-            }
+        for (GroupContextSummary summary: handler.getGroupSummaries()) {
+            handler.logDbg("  Group " + summary.getId() + " membership: "
+ + summary.getMemberIds());
         }
     }
 
@@ -305,7 +261,6 @@ public class Node {
             handler.setTau(tau);
             handler.setWireSummaryType(wireType);
             handler.setLoggerDelegate(new SysoutLoggingDelegate());
-            handler.updateLocalSummary(summary);
 
             switch (groupType) {
                 case LABELED:
@@ -314,6 +269,9 @@ public class Node {
                 case NONE:
                     break;
             }
+
+            handler.updateLocalSummary(summary);
+
         }
 
         final DatagramSocket receiveSocket = new ContextShimmedDatagramSocket(BASE_PORT + id);

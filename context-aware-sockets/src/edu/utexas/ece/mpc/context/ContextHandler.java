@@ -2,15 +2,20 @@ package edu.utexas.ece.mpc.context;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Observable;
 import java.util.Observer;
 import java.util.concurrent.ConcurrentHashMap;
 
+import edu.utexas.ece.mpc.context.group.GroupDefinition;
 import edu.utexas.ece.mpc.context.logger.ContextLoggingDelegate;
 import edu.utexas.ece.mpc.context.logger.NullContextLogger;
 import edu.utexas.ece.mpc.context.summary.ContextSummary;
+import edu.utexas.ece.mpc.context.summary.GroupContextSummary;
+import edu.utexas.ece.mpc.context.summary.HashMapGroupContextSummary;
 import edu.utexas.ece.mpc.context.summary.WireContextSummary;
 
 public class ContextHandler {
@@ -23,7 +28,7 @@ public class ContextHandler {
     private static ContextHandler singleton;
 
     private WireContextSummary myContext;
-    private Map<Integer, WireContextSummary> groupContext = new ConcurrentHashMap<Integer, WireContextSummary>();
+    private Map<Integer, GroupContextSummary> groupContext = new ConcurrentHashMap<Integer, GroupContextSummary>();
     private Map<Integer, WireContextSummary> receivedSummaries = new ConcurrentHashMap<Integer, WireContextSummary>();
 
     private ContextLoggingDelegate loggingDelegate = new NullContextLogger();
@@ -34,6 +39,9 @@ public class ContextHandler {
     private int tau;
     
     private WireSummaryType wireSummaryType = WireSummaryType.BLOOMIER;
+
+    private Map<Integer, GroupDefinition> groupDefinitions = new HashMap<Integer, GroupDefinition>();
+
 //    private WireSummaryType wireSummaryType = WireSummaryType.LABELED;
 
     // Note: Hide constructor (singleton pattern)
@@ -55,6 +63,12 @@ public class ContextHandler {
 
     public synchronized void updateLocalSummary(ContextSummary summary) {
         myContext = summary.getWireCopy();
+
+        for (GroupDefinition groupDefinition: groupDefinitions.values()) {
+            int gId = groupDefinition.getId();
+            GroupContextSummary groupSummary = groupContext.get(gId);
+            groupDefinition.handleContextSummary(groupSummary, myContext);
+        }
         logDbg("Updated local summary: " + myContext);
     }
 
@@ -74,7 +88,7 @@ public class ContextHandler {
             summary.incrementHops();
 
             // Is received summary local?
-            if (myContext.getId() == id) {
+            if (myContext != null && myContext.getId() == id) {
                 logDbg("Skipping summary (local): " + summary);
                 continue;
             }
@@ -98,6 +112,8 @@ public class ContextHandler {
             preReceivedSummaryUpdateHook.notifyObservers(summariesToPut);
         }
         
+        performGroupFormations(summariesToPut);
+
         for (WireContextSummary summaryToPut: summariesToPut) {
             receivedSummaries.put(summaryToPut.getId(), summaryToPut);
             logDbg("Summary put in receivedSummaries: " + summaryToPut);
@@ -109,8 +125,24 @@ public class ContextHandler {
         }
     }
 
+    private void performGroupFormations(Collection<WireContextSummary> summaries) {
+        for (GroupDefinition groupDefinition: groupDefinitions.values()) {
+            int gId = groupDefinition.getId();
+            GroupContextSummary groupSummary = groupContext.get(gId);
+            for (Iterator<WireContextSummary> it = summaries.iterator(); it.hasNext();) {
+                ContextSummary summary = it.next();
+                if (summary.getId() == gId) {
+                    groupDefinition.handleGroupSummary(groupSummary, summary);
+                    it.remove();
+                } else {
+                    groupDefinition.handleContextSummary(groupSummary, summary);
+                }
+            }
+        }
+    }
+
     public synchronized ContextSummary get(int id) {
-        if (id == myContext.getId()) {
+        if (myContext != null && id == myContext.getId()) {
             return myContext.getCopy();
         }
 
@@ -141,7 +173,9 @@ public class ContextHandler {
             summaries.add(myContext);
         }
         
-        summaries.addAll(groupContext.values());
+        for (GroupContextSummary groupSummary: groupContext.values()) {
+            summaries.add(groupSummary.getWireCopy());
+        }
 
         for (WireContextSummary summary: receivedSummaries.values()) {
             if (summary.getHops() < tau) {
@@ -231,13 +265,35 @@ public class ContextHandler {
         logDbg("Wire summary changed to " + wireSummaryType + " and stored context was cleared");
     }
 
-    public synchronized void addGroupSummary(ContextSummary groupSummary) {
-        groupContext.put(groupSummary.getId(), groupSummary.getWireCopy());
+    public synchronized void addGroupDefinition(GroupDefinition groupDefinition) {
+        int gId = groupDefinition.getId();
+        GroupContextSummary groupSummary = new HashMapGroupContextSummary(gId);
+
+        groupContext.put(gId, groupSummary);
+        
+        groupDefinitions.put(gId, groupDefinition);
+        
+        if (myContext != null) {
+            groupDefinition.handleContextSummary(groupSummary, myContext);
+        }
+
+        performGroupFormations(receivedSummaries.values());
     }
 
-    public void addGroupSummaries(Collection<ContextSummary> groupSummaries) {
-        for (ContextSummary summary: groupSummaries) {
-            addGroupSummary(summary);
+    public synchronized GroupContextSummary getGroupSummary(int gId) {
+        GroupContextSummary groupSummary = groupContext.get(gId);
+        if (groupSummary != null) {
+            return groupSummary.getGroupCopy();
+        } else {
+            return null;
         }
+    }
+    public synchronized List<GroupContextSummary> getGroupSummaries() {
+        List<GroupContextSummary> summaries = new ArrayList<GroupContextSummary>();
+        for (GroupContextSummary summary: groupContext.values()) {
+            summaries.add(summary.getGroupCopy());
+        }
+
+        return summaries;
     }
 }
